@@ -3,6 +3,7 @@
 // prints one CSV row per 240-sample frame.
 //
 //   doa_harness clip.wav > clip.c.csv
+//   doa_harness clip.wav START:END   # pretend playback (reference at -20 dBFS) on frames [START, END)
 
 #include <stdint.h>
 #include <stdio.h>
@@ -53,7 +54,9 @@ static int32_t *read_wav(const char *path, size_t *n_frames)
 
 int main(int argc, char **argv)
 {
-    if (argc != 2) { fprintf(stderr, "usage: %s clip.wav\n", argv[0]); return 2; }
+    long play_lo = -1, play_hi = -1;
+    if (argc == 3 && sscanf(argv[2], "%ld:%ld", &play_lo, &play_hi) != 2) argc = 0;
+    if (argc != 2 && argc != 3) { fprintf(stderr, "usage: %s clip.wav [START:END]\n", argv[0]); return 2; }
     size_t n;
     int32_t *pcm = read_wav(argv[1], &n);
     if (!pcm) return 1;
@@ -65,16 +68,18 @@ int main(int argc, char **argv)
     doa_tuning_default(&tuning);
     if (doa_init(&state, &geom, &tuning) != 0) { fprintf(stderr, "doa_init failed\n"); return 1; }
 
-    printf("frame,raw_bin,raw_deg,confidence,energy,weight,target_valid,target_deg,changed\n");
+    printf("frame,raw_bin,raw_deg,confidence,energy,weight,target_valid,target_deg,changed,playing\n");
     int32_t frame[DOA_MICS * DOA_FRAME];
     for (size_t k = 0; (k + 1) * DOA_FRAME <= n; k++) {
         for (int m = 0; m < DOA_MICS; m++)
             for (int i = 0; i < DOA_FRAME; i++)
                 frame[m * DOA_FRAME + i] = pcm[(k * DOA_FRAME + i) * DOA_MICS + m];
         doa_estimate_t e;
-        doa_process_frame(&state, frame, -1.0f, 1, &e);
-        printf("%zu,%d,%.6f,%.9g,%.9g,%.9g,%d,%.6f,%d\n", k, e.raw_bin, e.raw_deg, e.confidence,
-               e.energy, e.weight, e.target_valid, e.target_valid ? e.target_deg : 0.0f, e.changed);
+        float ref_ms = ((long)k >= play_lo && (long)k < play_hi) ? 0.01f : -1.0f;
+        doa_process_frame(&state, frame, ref_ms, 1, &e);
+        printf("%zu,%d,%.6f,%.9g,%.9g,%.9g,%d,%.6f,%d,%d\n", k, e.raw_bin, e.raw_deg, e.confidence,
+               e.energy, e.weight, e.target_valid, e.target_valid ? e.target_deg : 0.0f, e.changed,
+               e.playing);
     }
     free(pcm);
     return 0;
