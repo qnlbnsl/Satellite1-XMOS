@@ -380,6 +380,36 @@ startup. In debug-snapshot builds, packaged mic/ref routing is the reset default
 packaged mic timeout is deterministic silence, and packaged sync-missing frames
 must not enqueue legacy/downsampled reference data.
 
+### Direction of Arrival
+
+When `appconfDOA_ENABLED` (default on for four-mic builds) and
+`appconfDEVICE_CTRL_SPI` are both set, a direction task on tile 1
+(`satellite-xmos-firmware/src/doa/doa_task.c`, maths in
+`modules/fph/doa_srp`) fills two read commands on
+`AUDIO_PIPELINE_MIC_INPUT_SETTINGS_RESID` (`232`):
+
+| Command | ID | Encoded value | Direction | Command-map payload length | SPI frame payload length |
+| --- | --- | --- | --- | --- | --- |
+| `AUDIO_PIPELINE_SETTINGS_CMD_GET_DOA_RAW` | `3` | `0x83` | Read | 8 bytes | 9 bytes |
+| `AUDIO_PIPELINE_SETTINGS_CMD_GET_DOA_SMOOTH` | `4` | `0x84` | Read | 8 bytes | 9 bytes |
+
+Both return `doa_reading_t` after the status byte:
+`int32 doa_mrad`, `uint16 seq`, `uint8 valid`, `uint8 reserved`
+(little-endian). Angles are milliradians in `[0, 6283]`, counter-clockwise in
+the LED frame: LED `k` is at `k * 15` degrees.
+
+- `GET_DOA_SMOOTH` is the stabilised direction to show. `valid` is `0` until
+  the first lock, then stays `1`; the angle is held through silence.
+- `GET_DOA_RAW` is the latest frame's own peak. `valid` is `1` only when that
+  frame passed the energy, confidence and playback gates. `reserved` carries
+  the frame's confidence (map max minus mean) scaled to `0..255`.
+- `seq` is the low 16 bits of the frame counter, shared by both readings: it
+  advances by one per 15 ms frame (about 66.7 per second), including frames
+  the task had to drop.
+
+There is no window command yet (a confidence-weighted angle over the last N
+ms, for the moment a wake word fires); see `modules/fph/doa_srp/README.md`.
+
 ## Changelog
 
 ### `0x11`
