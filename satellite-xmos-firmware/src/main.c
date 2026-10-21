@@ -44,7 +44,9 @@ volatile int mic_from_usb = appconfMIC_SRC_DEFAULT;
 volatile int aec_ref_source = appconfAEC_REF_DEFAULT;
 
 #define DEVICE_STATUS_READY_REGISTER_IDX   0
-#define DEVICE_STATUS_READY_VALUE          1
+/* hermes/doa-capture: 0, not 1. satellite1d (SDK 0.2.0) reads status byte 0 as
+ * device_status and rejects anything but 0; it predates the readiness flag. */
+#define DEVICE_STATUS_READY_VALUE          0
 #if appconfAUDIO_PIPELINE_DEVELOPMENT
 #define AUDIO_PIPELINE_QUEUE_WAIT_TICKS pdMS_TO_TICKS(50)
 #else
