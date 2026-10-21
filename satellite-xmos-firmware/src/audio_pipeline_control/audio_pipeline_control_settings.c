@@ -37,7 +37,9 @@ void mic_output_pipeline_settings_default(
     settings->i2s_channel_map[1] = 3;
 
     settings->upsample_channel_map[0] = 0;
-    settings->upsample_channel_map[1] = 3;
+    /* hermes/doa-capture: lane 1 carries the sync word so a host can find
+     * the lane order; the four raw mics stay on lanes 2-5. */
+    settings->upsample_channel_map[1] = AUDIO_PIPELINE_OUTPUT_VIRTUAL_SYNC_CHANNEL;
     settings->upsample_channel_map[2] = 4;
     settings->upsample_channel_map[3] = 5;
     settings->upsample_channel_map[4] = 6;

@@ -2,10 +2,10 @@ query_tools_version()
 
 option(SATELLITE1_AUDIO_PIPELINE_DEVELOPMENT
     "Enable Satellite1 audio-pipeline development-only packaged controls"
-    OFF)
+    ON)
 option(SATELLITE1_AUDIO_PIPELINE_DEVELOPMENT_DEBUG
     "Enable Satellite1 audio-pipeline development debug capture/snapshot/probe/counter controls"
-    OFF)
+    ON)
 
 if(SATELLITE1_AUDIO_PIPELINE_DEVELOPMENT_DEBUG AND NOT SATELLITE1_AUDIO_PIPELINE_DEVELOPMENT)
     message(FATAL_ERROR
