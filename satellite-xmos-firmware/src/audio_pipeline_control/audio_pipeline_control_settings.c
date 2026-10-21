@@ -51,13 +51,11 @@ void mic_input_pipeline_settings_default(
 {
     settings->mic_gain = audio_pipeline_unity_gain;
     settings->ref_gain = audio_pipeline_unity_gain;
-#if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
-    settings->ref_source_mode = AUDIO_PIPELINE_REF_SOURCE_PACKAGED_INPUT;
-    settings->mic_source_mode = AUDIO_PIPELINE_MIC_SOURCE_PACKAGED_INPUT;
-#else
+    /* hermes/doa-capture: real PDM mics and the normal playback reference.
+     * The debug defaults (host-injected mics and reference) wait 50 ms each
+     * per frame for host audio that never comes and substitute silence. */
     settings->ref_source_mode = AUDIO_PIPELINE_REF_SOURCE_LEGACY_DOWNSAMPLED;
     settings->mic_source_mode = AUDIO_PIPELINE_MIC_SOURCE_PDM;
-#endif
 
     settings->ref_input_channel_map[0] =
         appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG ? 3 : 1;
