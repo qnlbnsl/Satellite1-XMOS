@@ -35,6 +35,7 @@
 #include "dfu_servicer.h"
 #include "gpio/gpio_servicer.h"
 #include "led_ring/led_ring_servicer.h"
+#include "doa/doa_task.h"
 
 
 /* Config headers for sw_pll */
@@ -642,6 +643,12 @@ void audio_pipeline_input(void *input_app_data,
                                         appconfMIC_PIPELINE_INPUT_CHANNELS,
                                         mic_input_settings->ref_gain,
                                         mic_input_settings->mic_gain);
+
+#if appconfDOA_ENABLED && ON_TILE(DOA_TILE_NO)
+    /* The same samples the packed lanes 2-5 carry: raw mics after the input
+     * gain, plus the playback reference for the direction task's gate. */
+    doa_task_push_frame(input_audio_frames, frame_count);
+#endif
 #endif
 #endif
 
@@ -976,6 +983,11 @@ void startup_task(void *arg)
         appconfDEVICE_CONTROL_SPI_PRIORITY,
         NULL
     );
+
+#if appconfDOA_ENABLED && ON_TILE(DOA_TILE_NO)
+    /* Before audio_pipeline_init() below, so the first frame finds the queue. */
+    doa_task_start(&audio_pipeline_runtime, appconfDOA_TASK_PRIORITY);
+#endif
 #endif
 
 #if ON_TILE(WS2812_TILE_NO)

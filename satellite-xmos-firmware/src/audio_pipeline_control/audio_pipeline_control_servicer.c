@@ -3,6 +3,7 @@
 #include <xassert.h>
 
 #include "FreeRTOS.h"
+#include "rtos_osal.h"
 
 #include "audio_pipeline_control_cmds.h"
 #include "audio_pipeline_control_servicer.h"
@@ -253,11 +254,14 @@ static control_ret_t audio_pipeline_servicer_read_cmd(
             return ret;
         }
 
+        /* the direction task writes both readings under the same lock */
+        int lock = rtos_osal_critical_enter();
         if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_DOA_RAW) {
             memcpy(payload, &ctx->doa->raw, sizeof(ctx->doa->raw));
         } else {
             memcpy(payload, &ctx->doa->smooth, sizeof(ctx->doa->smooth));
         }
+        rtos_osal_critical_exit(lock);
         payload[-1] = ret;
         return ret;
     }

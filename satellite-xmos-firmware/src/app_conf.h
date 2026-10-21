@@ -69,6 +69,13 @@
 #define appconfPIPELINE_BYPASS 0
 #endif
 
+/* Direction of arrival (modules/fph/doa_srp, src/doa/doa_task.c): fills
+ * GET_DOA_RAW / GET_DOA_SMOOTH on resource 232. Needs appconfDEVICE_CTRL_SPI
+ * and the four-mic capture. */
+#ifndef appconfDOA_ENABLED
+#define appconfDOA_ENABLED (appconfMIC_PIPELINE_INPUT_CHANNELS == 4)
+#endif
+
 #if appconfPIPELINE_BYPASS
 #define appconfAUDIO_PIPELINE_SKIP_STATIC_DELAY  1
 #define appconfAUDIO_PIPELINE_SKIP_AEC           1
@@ -203,6 +210,7 @@
 #define appconfSPI_TASK_PRIORITY                  (configMAX_PRIORITIES/2 + 1)
 #define appconfQSPI_FLASH_TASK_PRIORITY           (configMAX_PRIORITIES/2 + 0)
 #define appconfLED_TASK_PRIORITY                  (configMAX_PRIORITIES / 2 - 1)
+#define appconfDOA_TASK_PRIORITY                  (configMAX_PRIORITIES / 2 - 2)
 
 /* Software PLL settings for mclk recovery configurations */
 /* see fractions.h and register_setup.h for other pll settings */
