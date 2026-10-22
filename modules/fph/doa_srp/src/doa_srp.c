@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Immertec. Port of satellite/prototype/doa (hermes-os).
 //
-// srp.py and stabiliser.py, one to one. Single-precision float throughout the
-// per-frame path (the XU316 has a single-precision FPU); double only in
-// doa_init, which runs once. See ../README.md.
+// srp.py and stabiliser.py, one to one. Single-precision float throughout
+// (the XU316 has a single-precision FPU); the window, steering and stabiliser
+// constants are compile-time tables from ../gen_tables.py. See ../README.md.
 
 #include <math.h>
 #include <string.h>
@@ -10,53 +10,36 @@
 #include "xmath/xmath.h"
 
 #include "doa_srp.h"
+#include "doa_srp_tables.h"
 
 #define DOA_LED_DEG       (15.0f)
 #define DOA_EPS           (1e-12f)
 #define DOA_FULL_SCALE    (1.0f / 2147483648.0f)
-#define DOA_PI            (3.14159265358979323846)
-#define DOA_LAG_TOL_S     (1e-12)
 
 void doa_geometry_default(doa_geometry_t *geom)
 {
-    geom->radius_m = 0.0337f;
-    geom->mic_angles_deg[0] = 0.0f;
-    geom->mic_angles_deg[1] = 90.0f;
-    geom->mic_angles_deg[2] = 180.0f;
-    geom->mic_angles_deg[3] = 270.0f;
-    geom->speed_of_sound = 343.0f;
-    geom->band_lo_hz = 300.0f;
-    geom->band_hi_hz = 4000.0f;
+    *geom = doa_tab_geometry;
 }
 
 void doa_tuning_default(doa_tuning_t *t)
 {
-    t->floor_rise = 0.5f;
-    t->gate_db = 6.0f;
-    t->conf_floor = 0.2f;
-    t->onset_s = 0.05f;
-    t->onset_db = 6.0f;
-    t->onset_floor = 0.25f;
-    t->acc_tau_s = 0.5f;
-    t->first_lock_frames = 8;
-    t->margin_min = 0.15f;
-    t->k_base = 4;
-    t->k_per_led = 1;
-    t->k_max = 12;
-    t->follow_tau_s = 0.2f;
-    t->playback_dbfs = -60.0f;
-    t->playback_hold_s = 0.25f;
+    *t = doa_tab_tuning;
 }
 
-/* Python's float %: result in [0, m). */
-static float pymod(float x, float m)
+/* Python's x % 360.0, result in [0, 360), for x in (-360, 720): bit-identical
+ * there to the fmodf form it replaces. Every caller stays in that range
+ * (../README.md, "Choices made in the port"). */
+static float pymod360(float x)
 {
-    float r = fmodf(x, m);
-    if (r < 0.0f) {
-        r += m;
+    float r = x;
+    if (r >= 360.0f) {
+        r -= 360.0f;
     }
-    if (r >= m) {
-        r -= m;
+    if (r < 0.0f) {
+        r += 360.0f;
+    }
+    if (r >= 360.0f) {
+        r -= 360.0f;
     }
     return r;
 }
@@ -64,7 +47,7 @@ static float pymod(float x, float m)
 /* Signed shortest a - b in degrees, (-180, 180]. */
 static float ang_diff(float a, float b)
 {
-    float d = pymod(a - b, 360.0f);
+    float d = pymod360(a - b);
     return d > 180.0f ? d - 360.0f : d;
 }
 
@@ -95,99 +78,28 @@ static float refine(const float *s, int *best)
     if (best != NULL) {
         *best = b;
     }
-    return pymod(((float)b + offset) * 360.0f / (float)n, 360.0f);
+    return pymod360(((float)b + offset) * 360.0f / (float)n);
 }
 
 int doa_init(doa_state_t *s, const doa_geometry_t *g, const doa_tuning_t *t)
 {
-    double pos[DOA_MICS][2];
-    double tau[DOA_DIRS][DOA_MICS];
-    double uniq[DOA_PAIRS][DOA_DIRS];
-
-    memset(s, 0, sizeof(*s));
-
-    for (int n = 0; n < DOA_FRAME; n++) {          /* np.hanning: symmetric */
-        s->window[n] = (float)(0.5 - 0.5 * cos(2.0 * DOA_PI * n / (DOA_FRAME - 1)));
-    }
-
-    /* rfftfreq bins with band_lo <= f <= band_hi */
-    const double df = (double)DOA_FS_HZ / DOA_NFFT;
-    s->bin_lo = -1;
-    s->bin_hi = -1;
-    for (int k = 0; k <= DOA_NFFT / 2; k++) {
-        double f = k * df;
-        if (f >= g->band_lo_hz && f <= g->band_hi_hz) {
-            if (s->bin_lo < 0) s->bin_lo = k;
-            s->bin_hi = k;
-        }
-    }
-    /* bins 0 and N/2 share a slot in fft_f32_forward's packed output */
-    if (s->bin_lo < 1 || s->bin_hi >= DOA_NFFT / 2) {
+    if (memcmp(g, &doa_tab_geometry, sizeof(*g)) != 0 || memcmp(t, &doa_tab_tuning, sizeof(*t)) != 0) {
         return -1;
     }
-    s->n_bins = s->bin_hi - s->bin_lo + 1;
-
-    /* geometry.py: tau_m(theta) = -(p_m . u(theta)) / c */
-    for (int m = 0; m < DOA_MICS; m++) {
-        double a = g->mic_angles_deg[m] * DOA_PI / 180.0;
-        pos[m][0] = g->radius_m * cos(a);
-        pos[m][1] = g->radius_m * sin(a);
-    }
-    for (int d = 0; d < DOA_DIRS; d++) {
-        double th = d * (2.0 * DOA_PI / DOA_DIRS);
-        for (int m = 0; m < DOA_MICS; m++) {
-            tau[d][m] = -(pos[m][0] * cos(th) + pos[m][1] * sin(th)) / g->speed_of_sound;
-        }
-    }
-
-    /* Pairs in srp.py order. Each (direction, pair) lag is stored as an index
-     * into the pair's list of distinct |lag| values plus a sign: the score of
-     * -L reuses the two partial sums of +L, so mirror directions cost nothing. */
-    int p = 0;
-    for (int i = 0; i < DOA_MICS; i++) {
-        for (int j = i + 1; j < DOA_MICS; j++, p++) {
-            s->pair_i[p] = (uint8_t)i;
-            s->pair_j[p] = (uint8_t)j;
-            s->n_unique[p] = 0;
-            for (int d = 0; d < DOA_DIRS; d++) {
-                double lag = tau[d][i] - tau[d][j];
-                double mag = fabs(lag);
-                int u;
-                for (u = 0; u < s->n_unique[p]; u++) {
-                    if (fabs(uniq[p][u] - mag) <= DOA_LAG_TOL_S) break;
-                }
-                if (u == s->n_unique[p]) {
-                    uniq[p][u] = mag;
-                    s->n_unique[p]++;
-                    double w0 = 2.0 * DOA_PI * df * s->bin_lo * mag;
-                    double dw = 2.0 * DOA_PI * df * mag;
-                    s->lag_start_re[p][u] = (float)cos(w0);
-                    s->lag_start_im[p][u] = (float)sin(w0);
-                    s->lag_step_re[p][u] = (float)cos(dw);
-                    s->lag_step_im[p][u] = (float)sin(dw);
-                }
-                s->lag_ref[d][p].idx = (int16_t)u;
-                s->lag_ref[d][p].sign = (int8_t)(lag >= 0.0 ? 1 : -1);
-            }
-        }
-    }
-    s->norm = (float)(DOA_PAIRS * s->n_bins);
-
-    /* stabiliser constants */
+    memset(s, 0, sizeof(*s));
     s->t = *t;
-    s->frame_dt = (float)DOA_FRAME / (float)DOA_FS_HZ;
-    {
-        /* smallest n with n * dt >= onset_s: stabiliser.py's look-back test */
-        double ratio = (double)t->onset_s / ((double)DOA_FRAME / DOA_FS_HZ);
-        int n = (int)ceil(ratio - 1e-9);
-        if (n < 0) n = 0;
-        if (n > DOA_ONSET_HIST - 2) return -1;
-        s->onset_frames = n;
-    }
-    s->gate_ratio = powf(10.0f, t->gate_db / 10.0f);
-    s->playback_ms = powf(10.0f, t->playback_dbfs / 10.0f);
-    s->playback_hold_frames = (int)ceilf(t->playback_hold_s / s->frame_dt - 1e-6f);
     return 0;
+}
+
+/* k^n by repeated multiplication: the per-frame factor over n >= 1 frames.
+ * Stops early once the product reaches 0, so a huge n costs at most ~3500 steps. */
+static float frames_pow(float k, unsigned n)
+{
+    float r = k;
+    for (unsigned i = 1; i < n && r > 0.0f; i++) {
+        r *= k;
+    }
+    return r;
 }
 
 float doa_mean_square(const int32_t *x, int channels, int n)
@@ -214,7 +126,7 @@ static void srp_score(doa_state_t *s, const int32_t *mics)
         const int32_t *x = mics + m * DOA_FRAME;
         int nonzero = 0;
         for (int n = 0; n < DOA_FRAME; n++) {
-            buf[n] = (float)x[n] * DOA_FULL_SCALE * s->window[n];
+            buf[n] = (float)x[n] * DOA_FULL_SCALE * doa_tab_window[n];
             nonzero |= (x[n] != 0);
         }
         memset(&buf[DOA_FRAME], 0, (DOA_NFFT - DOA_FRAME) * sizeof(float));
@@ -226,22 +138,22 @@ static void srp_score(doa_state_t *s, const int32_t *mics)
     }
 
     for (int p = 0; p < DOA_PAIRS; p++) {
-        const complex_float_t *xi = (const complex_float_t *)s->spec[s->pair_i[p]];
-        const complex_float_t *xj = (const complex_float_t *)s->spec[s->pair_j[p]];
-        for (int b = 0; b < s->n_bins; b++) {
-            const complex_float_t a = xi[s->bin_lo + b];
-            const complex_float_t c = xj[s->bin_lo + b];
+        const complex_float_t *xi = (const complex_float_t *)s->spec[doa_tab_pair_i[p]];
+        const complex_float_t *xj = (const complex_float_t *)s->spec[doa_tab_pair_j[p]];
+        for (int b = 0; b < DOA_TAB_N_BINS; b++) {
+            const complex_float_t a = xi[DOA_TAB_BIN_LO + b];
+            const complex_float_t c = xj[DOA_TAB_BIN_LO + b];
             float re = a.re * c.re + a.im * c.im;       /* a * conj(c) */
             float im = a.im * c.re - a.re * c.im;
             float mag = sqrtf(re * re + im * im) + DOA_EPS;
             phat_re[b] = re / mag;
             phat_im[b] = im / mag;
         }
-        for (int u = 0; u < s->n_unique[p]; u++) {
-            float wr = s->lag_step_re[p][u], wi = s->lag_step_im[p][u];
-            float zr = s->lag_start_re[p][u], zi = s->lag_start_im[p][u];
+        for (int u = 0; u < doa_tab_n_unique[p]; u++) {
+            float wr = doa_tab_lag_step_re[p][u], wi = doa_tab_lag_step_im[p][u];
+            float zr = doa_tab_lag_start_re[p][u], zi = doa_tab_lag_start_im[p][u];
             float sc = 0.0f, ss = 0.0f;
-            for (int b = 0; b < s->n_bins; b++) {
+            for (int b = 0; b < DOA_TAB_N_BINS; b++) {
                 sc += phat_re[b] * zr;
                 ss += phat_im[b] * zi;
                 float nr = zr * wr - zi * wi;
@@ -254,11 +166,11 @@ static void srp_score(doa_state_t *s, const int32_t *mics)
     }
 
     /* Re{phat * e^{+j w L}} = c - s for L > 0, c + s for L < 0 */
-    const float inv_norm = 1.0f / s->norm;
+    const float inv_norm = 1.0f / DOA_TAB_NORM;
     for (int d = 0; d < DOA_DIRS; d++) {
         float acc = 0.0f;
         for (int p = 0; p < DOA_PAIRS; p++) {
-            const doa_lag_ref_t r = s->lag_ref[d][p];
+            const doa_lag_ref_t r = doa_tab_lag_ref[d][p];
             const float c = s->part_c[p][r.idx], q = s->part_s[p][r.idx];
             acc += (r.sign > 0) ? c - q : c + q;
         }
@@ -277,12 +189,12 @@ static float onset_weight(doa_state_t *s, float energy)
     s->hist_len++;
     while (s->hist_len > 1) {
         int second = (s->hist_head + 1) % DOA_ONSET_HIST;
-        if ((int)(s->frame - s->hist_frame[second]) < s->onset_frames) break;
+        if ((int)(s->frame - s->hist_frame[second]) < DOA_TAB_ONSET_FRAMES) break;
         s->hist_head = second;
         s->hist_len--;
     }
     float slope = 0.0f;
-    if ((int)(s->frame - s->hist_frame[s->hist_head]) >= s->onset_frames) {
+    if ((int)(s->frame - s->hist_frame[s->hist_head]) >= DOA_TAB_ONSET_FRAMES) {
         slope = e_db - s->hist_db[s->hist_head];
     }
     float w = slope / t->onset_db;
@@ -312,7 +224,7 @@ static void cand_reset(doa_state_t *s)
 }
 
 /* stabiliser.py::Stabiliser._track */
-static int track(doa_state_t *s, float dt)
+static int track(doa_state_t *s, unsigned frames)
 {
     const doa_tuning_t *t = &s->t;
     float est = refine(s->acc, NULL);
@@ -329,8 +241,8 @@ static int track(doa_state_t *s, float dt)
 
     float dist = fabsf(ang_diff(est, s->target)) / DOA_LED_DEG;
     if (dist < 1.0f) {
-        float gain = 1.0f - expf(-dt / t->follow_tau_s);
-        s->target = pymod(s->target + ang_diff(est, s->target) * gain, 360.0f);
+        float gain = 1.0f - frames_pow(DOA_TAB_FOLLOW_KEEP, frames);
+        s->target = pymod360(s->target + ang_diff(est, s->target) * gain);
         cand_reset(s);
         return 0;
     }
@@ -365,7 +277,7 @@ int doa_process_frame(doa_state_t *s,
     if (frames_elapsed == 0) {
         frames_elapsed = 1;
     }
-    const float dt = s->frame_dt * (float)frames_elapsed;
+    const float dt = DOA_TAB_FRAME_DT * (float)frames_elapsed;
     s->frame += frames_elapsed;
 
     srp_score(s, mics);
@@ -387,13 +299,13 @@ int doa_process_frame(doa_state_t *s,
     mean /= (float)DOA_DIRS;
     float conf = s->scores[raw_bin] - mean;
     float onset = onset_weight(s, energy);
-    int loud = energy > s->floor * s->gate_ratio;
+    int loud = energy > s->floor * DOA_TAB_GATE_RATIO;
     float weight = (loud && conf >= t->conf_floor) ? onset : 0.0f;
 
     /* Playback gate: the speaker sits under the array and wins every frame. */
     int playing = 0;
-    if (ref_ms > s->playback_ms) {
-        s->playback_hold = s->playback_hold_frames;
+    if (ref_ms > DOA_TAB_PLAYBACK_MS) {
+        s->playback_hold = DOA_TAB_PLAYBACK_HOLD_FRAMES;
         playing = 1;
     } else if (s->playback_hold > 0) {
         s->playback_hold -= (int)frames_elapsed;
@@ -404,7 +316,7 @@ int doa_process_frame(doa_state_t *s,
         weight = 0.0f;
     }
 
-    const float decay = expf(-dt / t->acc_tau_s);
+    const float decay = frames_pow(DOA_TAB_ACC_DECAY, frames_elapsed);
     float acc_max = 0.0f;
     if (weight > 0.0f) {
         float m[DOA_DIRS];
@@ -427,7 +339,7 @@ int doa_process_frame(doa_state_t *s,
 
     int changed = 0;
     if (weight > 0.0f && acc_max > 0.0f) {
-        changed = track(s, dt);
+        changed = track(s, frames_elapsed);
     }
 
     out->frame = s->frame;
