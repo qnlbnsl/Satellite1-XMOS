@@ -410,6 +410,25 @@ the LED frame: LED `k` is at `k * 15` degrees.
 There is no window command yet (a confidence-weighted angle over the last N
 ms, for the moment a wake word fires); see `modules/fph/doa_srp/README.md`.
 
+### Audio Pipeline Heap Stats
+
+Both audio-pipeline servicers answer one read command with the FreeRTOS
+heap state of their own tile: `AUDIO_PIPELINE_MIC_OUTPUT_SETTINGS_RESID`
+(`230`) for tile 0, `AUDIO_PIPELINE_MIC_INPUT_SETTINGS_RESID` (`232`) for
+tile 1. The id is fixed and does not move with the debug block.
+
+| Command | ID | Encoded value | Direction | Command-map payload length | SPI frame payload length |
+| --- | --- | --- | --- | --- | --- |
+| `AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS` | `32` | `0xA0` | Read | 40 bytes | 41 bytes |
+
+`heap_stats_t` after the status byte, little-endian, every field `uint32`
+except the last four bytes: `total_bytes` (`configTOTAL_HEAP_SIZE`),
+`free_bytes`, `min_ever_free_bytes`, `largest_free_block`,
+`smallest_free_block`, `free_blocks`, `successful_allocs`,
+`successful_frees`, `uptime_ticks` (1 kHz), then `uint8 tile` and three
+reserved bytes. Peak heap use is `total_bytes - min_ever_free_bytes`; task
+stacks are inside it.
+
 ## Changelog
 
 ### `0x11`

@@ -110,6 +110,22 @@ typedef struct
     uint32_t mic_mean_abs[AUDIO_PIPELINE_MIC_INPUT_CHANNEL_MAP_COUNT];
 } mic_input_debug_stats_t;
 
+/* FreeRTOS heap_4 state of the tile that answers. All byte counts. */
+typedef struct
+{
+    uint32_t total_bytes;          /* configTOTAL_HEAP_SIZE */
+    uint32_t free_bytes;           /* xPortGetFreeHeapSize() */
+    uint32_t min_ever_free_bytes;  /* xPortGetMinimumEverFreeHeapSize() */
+    uint32_t largest_free_block;
+    uint32_t smallest_free_block;
+    uint32_t free_blocks;
+    uint32_t successful_allocs;
+    uint32_t successful_frees;
+    uint32_t uptime_ticks;         /* xTaskGetTickCount(), 1 kHz */
+    uint8_t tile;
+    uint8_t reserved[3];
+} heap_stats_t;
+
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
 typedef struct
 {
