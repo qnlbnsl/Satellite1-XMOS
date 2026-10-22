@@ -50,8 +50,16 @@ counter-clockwise, and mic m sits at `mic_angles_deg[m]`.
 | playback_dbfs | −60 dB re full scale (reference mean square) | new, not in the prototype |
 | playback_hold_s | 0.25 s after the reference falls silent | new, not in the prototype |
 
-All of them are in `doa_geometry_default` / `doa_tuning_default`. Changing
-the prototype's TOML does not change the firmware.
+All of them are set in `gen_tables.py` (`GEOMETRY`, `TUNING`), which writes
+`src/doa_srp_tables.h`: the window, band, steering phasors and stabiliser
+constants as `static const` data, computed in double and rounded to float
+exactly as the old run-time `doa_init` did (bit-identical on x86 glibc and
+on xcore newlib under xsim, 2026-10-22). `doa_geometry_default` /
+`doa_tuning_default` return those values, and `doa_init` refuses (-1) any
+other geometry or tuning. To change a constant, edit `gen_tables.py`, run
+`python3 gen_tables.py` and commit both files; the build runs
+`gen_tables.py --check` and fails while the header is stale. Changing the
+prototype's TOML does not change the firmware.
 
 ### Choices made in the port
 
@@ -70,8 +78,15 @@ the prototype's TOML does not change the firmware.
 - **Time in frames.** The prototype measures the onset look-back in seconds
   of float time; here it is whole frames (`ceil(onset_s / 15 ms)` = 4), which
   is the same test for any `onset_s` that is not an exact multiple of 15 ms.
-  `frames_elapsed` > 1 (frames dropped upstream) stretches dt for the decays
-  and keeps the look-back in real time.
+  `frames_elapsed` > 1 (frames dropped upstream) keeps the look-back in real
+  time and applies the one-frame decay factors `frames_elapsed` times
+  (repeated multiplication, within 2 ulp of `expf` for up to 8 frames), so
+  no `expf` runs per frame.
+- **Angle wrap without `fmodf`.** `pymod360` subtracts or adds 360 once, which
+  equals the `fmodf` form bit for bit on (-360, 720) (checked over every float
+  in that range on 2026-10-22). Its inputs stay inside: `refine` gives
+  [-7.5°, 352.5°], `ang_diff` takes two angles in [0, 360), and the follow
+  step adds at most ±180° to a target in [0, 360).
 - **Playback gate** (not in the prototype): a frame carries no weight while
   the reference's mean square is above `playback_dbfs`, or for
   `playback_hold_s` after. The speaker sits under the array and would win every
@@ -81,7 +96,7 @@ the prototype's TOML does not change the firmware.
 ## API
 
 ```c
-static doa_state_t st __attribute__((aligned(8)));   /* 15.9 KB */
+static doa_state_t st __attribute__((aligned(8)));   /* 11.7 KB */
 doa_geometry_t g; doa_tuning_t t;
 doa_geometry_default(&g); doa_tuning_default(&t);
 doa_init(&st, &g, &t);
@@ -129,7 +144,7 @@ Nothing here has been built with the xcore toolchain or run on the chip.
 - **Stack.** `RTOS_THREAD_STACK_SIZE(doa_task)` relies on the compiler's
   `.nstackwords`; check it in the `-report` output. The per-frame scratch is
   in `doa_state_t`, so the task's own frame stays small.
-- **Memory.** 15.9 KB state plus an 11.3 KB two-frame pool, static on
+- **Memory.** 11.7 KB state, 2.3 KB of const tables, and an 11.3 KB two-frame pool, static on
   tile 1. Check the tile-1 `-report` for headroom. `doa_srp.c` is also
   linked into tile 0, which never calls it.
 - **Precision on xcore.** Float behaviour on the XS3 FPU should match x86

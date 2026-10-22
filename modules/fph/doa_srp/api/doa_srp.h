@@ -79,27 +79,12 @@ typedef struct {
      * needs is easy to keep: the struct must be 8-byte aligned. */
     float spec[DOA_MICS][DOA_NFFT];
 
-    /* SRP-PHAT constants */
-    float window[DOA_FRAME];
-    int   bin_lo, bin_hi, n_bins;
-    uint8_t pair_i[DOA_PAIRS], pair_j[DOA_PAIRS];
-    int   n_unique[DOA_PAIRS];
-    float lag_start_re[DOA_PAIRS][DOA_DIRS], lag_start_im[DOA_PAIRS][DOA_DIRS];
-    float lag_step_re[DOA_PAIRS][DOA_DIRS], lag_step_im[DOA_PAIRS][DOA_DIRS];
-    doa_lag_ref_t lag_ref[DOA_DIRS][DOA_PAIRS];
-    float norm;
-
     /* per-frame scratch, kept here so the caller's stack stays small */
     float phat_re[DOA_MAX_BINS], phat_im[DOA_MAX_BINS];
     float part_c[DOA_PAIRS][DOA_DIRS], part_s[DOA_PAIRS][DOA_DIRS];
 
-    /* stabiliser constants */
+    /* stabiliser tuning (equal to doa_tuning_default) */
     doa_tuning_t t;
-    float frame_dt;
-    int   onset_frames;        /* frames back the onset slope is measured over */
-    float gate_ratio;          /* 10^(gate_db/10) */
-    float playback_ms;         /* 10^(playback_dbfs/10) */
-    int   playback_hold_frames;
 
     /* stabiliser state */
     float scores[DOA_DIRS];
@@ -119,15 +104,16 @@ typedef struct {
     int   playback_hold;
 } doa_state_t;
 
-/* calibration.toml as of 2026-10-21: radius 33.7 mm, mic k under LED 6k. */
+/* The geometry the steering tables were generated for (gen_tables.py GEOMETRY). */
 void doa_geometry_default(doa_geometry_t *geom);
 
-/* tuning.toml as of 2026-10-21, plus playback_dbfs -60 and playback_hold_s 0.25. */
+/* The tuning the stabiliser constants were generated for (gen_tables.py TUNING). */
 void doa_tuning_default(doa_tuning_t *tuning);
 
-/* Precomputes the window, band and steering tables. `state` must be 8-byte
- * aligned. Returns 0, or -1 if the tuning cannot be represented
- * (onset_s longer than DOA_ONSET_HIST - 2 frames). */
+/* Resets `state` (8-byte aligned) for the compile-time tables in
+ * src/doa_srp_tables.h. Returns 0, or -1 if `geom` or `tuning` differs from
+ * doa_geometry_default / doa_tuning_default; to change either, edit
+ * gen_tables.py and regenerate. */
 int doa_init(doa_state_t *state, const doa_geometry_t *geom, const doa_tuning_t *tuning);
 
 /* Mean square of `n` samples on each of `channels` channel-major int32
