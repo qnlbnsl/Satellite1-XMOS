@@ -22,7 +22,15 @@
 #define appconfAUDIO_CLOCK_FREQUENCY            MIC_ARRAY_CONFIG_MCLK_FREQ
 #define appconfPDM_CLOCK_FREQUENCY              MIC_ARRAY_CONFIG_PDM_FREQ
 #define appconfAUDIO_PIPELINE_SAMPLE_RATE       16000
-#define appconfAUDIO_PIPELINE_CHANNELS          MIC_ARRAY_CONFIG_MIC_COUNT
+#define appconfMIC_PIPELINE_REF_CHANNELS        2
+#define appconfMIC_PIPELINE_INPUT_CHANNELS      MIC_ARRAY_CONFIG_MIC_COUNT
+#define appconfMIC_PIPELINE_PROC_CHANNELS       2
+#define appconfMIC_PIPELINE_OUT_CHANNELS        2
+
+/* Compatibility for legacy/non-Satellite1 pipeline variants during integration. */
+#define appconfAUDIO_PIPELINE_CHANNELS          appconfMIC_PIPELINE_INPUT_CHANNELS
+
+#define appconfAUDIO_SPK_CHANNELS               2
 
 #ifndef appconfAUDIO_SPK_PL_SR_FACTOR
 #define appconfAUDIO_SPK_PL_SR_FACTOR           3
@@ -36,10 +44,35 @@
  * A positive delay will delay mics
  * A negative delay will delay ref
  */
+#ifndef appconfINPUT_SAMPLES_MIC_DELAY_MS
 #define appconfINPUT_SAMPLES_MIC_DELAY_MS        0
+#endif
+
+#ifndef appconfMIC_PASSTHROUGH_TEST_PATTERN
+#define appconfMIC_PASSTHROUGH_TEST_PATTERN 0
+#endif
+
+#ifndef appconfSPEAKER_OUTPUT_TEST_PATTERN
+#define appconfSPEAKER_OUTPUT_TEST_PATTERN 0
+#endif
+
+#ifndef appconfAUDIO_PIPELINE_DEVELOPMENT
+#define appconfAUDIO_PIPELINE_DEVELOPMENT 0
+#endif
+
+#ifndef appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
+#define appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG 0
+#endif
 
 #ifndef appconfPIPELINE_BYPASS
 #define appconfPIPELINE_BYPASS 0
+#endif
+
+/* Direction of arrival (modules/fph/doa_srp, src/doa/doa_task.c): fills
+ * GET_DOA_RAW / GET_DOA_SMOOTH on resource 232. Needs appconfDEVICE_CTRL_SPI
+ * and the four-mic capture. */
+#ifndef appconfDOA_ENABLED
+#define appconfDOA_ENABLED (appconfMIC_PIPELINE_INPUT_CHANNELS == 4)
 #endif
 
 #if appconfPIPELINE_BYPASS
@@ -142,6 +175,7 @@
 #define appconfSPI_TASK_PRIORITY                  (configMAX_PRIORITIES/2 + 1)
 #define appconfQSPI_FLASH_TASK_PRIORITY           (configMAX_PRIORITIES/2 + 0)
 #define appconfLED_TASK_PRIORITY                  (configMAX_PRIORITIES / 2 - 1)
+#define appconfDOA_TASK_PRIORITY                  (configMAX_PRIORITIES / 2 - 2)
 
 /* Software PLL settings for mclk recovery configurations */
 /* see fractions.h and register_setup.h for other pll settings */

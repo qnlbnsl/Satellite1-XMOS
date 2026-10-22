@@ -16,6 +16,8 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/audio_pipelines)
 set(VERSIONING_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/versioning.py)
 option(USE_DEV_TRACKING "Enable dev-build tracking" OFF)
 option(ALLOW_DIRTY_VERSIONING "Allow versioning.py to run from a dirty workspace for controlled CI inputs or local throwaway builds" OFF)
+# Direction of arrival on tile 1 (modules/fph/doa_srp). Off until tile 1 has the room; see that README.
+option(SATELLITE1_DOA "Build the DOA task and its GET_DOA_RAW / GET_DOA_SMOOTH reads" OFF)
 
 #**********************
 # Flags
@@ -30,6 +32,7 @@ set(APP_COMPILER_FLAGS
 
 set(APP_COMPILE_DEFINITIONS
     DEBUG_PRINT_ENABLE=0
+    appconfDOA_ENABLED=$<BOOL:${SATELLITE1_DOA}>
     PLATFORM_USES_TILE_0=1
     PLATFORM_USES_TILE_1=1
     XUD_CORE_CLOCK=600
@@ -46,6 +49,7 @@ set(APP_LINK_OPTIONS
 
 set(APP_COMMON_LINK_LIBRARIES
     fph::device_control
+    fph::doa_srp
     lib_src
     lib_sw_pll
 )

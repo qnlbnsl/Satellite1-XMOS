@@ -39,15 +39,25 @@
  * audio_pipeline_input() and audio_pipeline_output()
  */
 typedef struct {
-    int32_t samples[appconfAUDIO_PIPELINE_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
-    int32_t aec_reference_audio_samples[appconfAUDIO_PIPELINE_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
-    int32_t mic_samples_passthrough[appconfAUDIO_PIPELINE_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t samples[appconfMIC_PIPELINE_PROC_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t aec_reference_audio_samples[appconfMIC_PIPELINE_REF_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t mic_samples_passthrough[appconfMIC_PIPELINE_INPUT_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
 
     /* Below is additional context needed by other stages on a per frame basis */
     int32_t vnr_pred_flag;
     float_s32_t max_ref_energy;
     float_s32_t aec_corr_factor;
     int32_t ref_active_flag;
+#if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
+    uint32_t debug_frame_counter;
+    uint32_t debug_aec_x_energy_recalc_bin;
+    int32_t debug_mic_input[2][4];
+    int32_t debug_ref_input[2][4];
+    int32_t debug_aec_output[2][4];
+    int32_t debug_ic_output[4];
+    int32_t debug_ns_output[4];
+    int32_t debug_agc_output[4];
+#endif
 } frame_data_t;
 
 typedef struct stage_delay_ctx {
