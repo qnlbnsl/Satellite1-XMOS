@@ -46,6 +46,7 @@ set(APP_LINK_OPTIONS
 
 set(APP_COMMON_LINK_LIBRARIES
     fph::device_control
+    fph::doa_srp
     lib_src
     lib_sw_pll
 )
