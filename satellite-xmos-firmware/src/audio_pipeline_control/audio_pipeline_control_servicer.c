@@ -3,6 +3,7 @@
 #include <xassert.h>
 
 #include "FreeRTOS.h"
+#include "task.h"
 #include "rtos_osal.h"
 
 #include "audio_pipeline_control_cmds.h"
@@ -31,6 +32,8 @@ static control_cmd_info_t audio_pipeline_mic_settings_cmd_map[] = {
       sizeof(mic_output_pipeline_settings_t), CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_SET_SETTINGS_PARTIAL, 1,
       sizeof(mic_output_pipeline_settings_update_t), CMD_WRITE_ONLY },
+    { AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS, 1,
+      sizeof(heap_stats_t), CMD_READ_ONLY },
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_OUTPUT_PACKAGED_SNAPSHOT, 1,
       sizeof(mic_output_packaged_snapshot_t), CMD_READ_ONLY },
@@ -54,6 +57,8 @@ static control_cmd_info_t audio_pipeline_mic_input_settings_cmd_map[] = {
       sizeof(doa_reading_t), CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_INPUT_DEBUG_STATS, 1,
       sizeof(mic_input_debug_stats_t), CMD_READ_ONLY },
+    { AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS, 1,
+      sizeof(heap_stats_t), CMD_READ_ONLY },
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_INPUT_PACKAGED_SNAPSHOT, 1,
       sizeof(mic_input_packaged_snapshot_t), CMD_READ_ONLY },
@@ -232,6 +237,27 @@ static control_ret_t audio_pipeline_servicer_read_cmd(
     }
 
     cmd_id = CONTROL_CMD_CLEAR_READ(cmd);
+
+    if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS) {
+        HeapStats_t hs;
+        heap_stats_t out;
+
+        vPortGetHeapStats(&hs);
+        memset(&out, 0, sizeof(out));
+        out.total_bytes = configTOTAL_HEAP_SIZE;
+        out.free_bytes = hs.xAvailableHeapSpaceInBytes;
+        out.min_ever_free_bytes = hs.xMinimumEverFreeBytesRemaining;
+        out.largest_free_block = hs.xSizeOfLargestFreeBlockInBytes;
+        out.smallest_free_block = hs.xSizeOfSmallestFreeBlockInBytes;
+        out.free_blocks = hs.xNumberOfFreeBlocks;
+        out.successful_allocs = hs.xNumberOfSuccessfulAllocations;
+        out.successful_frees = hs.xNumberOfSuccessfulFrees;
+        out.uptime_ticks = xTaskGetTickCount();
+        out.tile = THIS_XCORE_TILE;
+        memcpy(payload, &out, sizeof(out));
+        payload[-1] = ret;
+        return ret;
+    }
 
     if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_AVAILABLE_MIC_COUNT) {
         if (resid != AUDIO_PIPELINE_MIC_INPUT_SETTINGS_RESID) {

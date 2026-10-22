@@ -29,7 +29,11 @@ enum e_audio_pipeline_settings_cmds
     AUDIO_PIPELINE_SETTINGS_CMD_GET_FIXED_DELAY_AEC_CAPTURE_PROBE,
 #endif
 
-    NUM_AUDIO_PIPELINE_SETTINGS_CMDS
+    NUM_AUDIO_PIPELINE_SETTINGS_CMDS,
+
+    /* Fixed id so it does not move with the debug block above. Served on
+     * resource 230 (tile 0) and 232 (tile 1); each reports its own tile. */
+    AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS = 32,
 };
 
 typedef enum

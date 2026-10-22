@@ -5,6 +5,8 @@ A C port of the Pi prototype in hermes-os `satellite/prototype/doa`
 board. Same constants, same gates, same hysteresis rules. The ring glide
 (`ring.py`) stays on the host and is not ported.
 
+**Off by default** (CMake `-DSATELLITE1_DOA=ON` turns it on) until the lib_voice swap frees tile 1: with DOA on, tile 1 is 15,396 B over even with the const tables.
+
 ## What it computes
 
 Per 240-sample frame (15 ms at 16 kHz), from the four raw mics:
