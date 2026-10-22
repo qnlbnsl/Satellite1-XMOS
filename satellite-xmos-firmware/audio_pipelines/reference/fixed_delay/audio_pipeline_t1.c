@@ -64,7 +64,6 @@ static int32_t fixed_delay_aec_capture_ref_prefix
 static uint16_t fixed_delay_aec_capture_prefix_frame_index;
 static uint16_t fixed_delay_aec_capture_prefix_sample_index;
 static int fixed_delay_aec_capture_prefix_has_nonzero;
-extern unsigned fixed_delay_aec_debug_get_recalc_bin(void);
 
 void fixed_delay_aec_capture_arm(const fixed_delay_aec_capture_arm_t *arm)
 {
@@ -411,7 +410,7 @@ static void stage_aec(frame_data_t *frame_data)
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     int capture_current_frame = 0;
     frame_data->debug_frame_counter = ++fixed_delay_debug_frame_counter;
-    frame_data->debug_aec_x_energy_recalc_bin = fixed_delay_aec_debug_get_recalc_bin();
+    frame_data->debug_aec_x_energy_recalc_bin = aec_state.state.shared_state.X_energy_recalc_bin;
     for (size_t ch = 0; ch < 2; ch++) {
         for (size_t i = 0; i < 4; i++) {
             frame_data->debug_mic_input[ch][i] = frame_data->samples[ch][i];
@@ -423,9 +422,8 @@ static void stage_aec(frame_data_t *frame_data)
         frame_data->aec_reference_audio_samples);
 #endif
 
-    aec_process_frame_1thread(
-            &aec_state.aec_main_state,
-            &aec_state.aec_shadow_state,
+    aec_process_frame(
+            &aec_state.state,
             stage1_output,
             NULL,
             frame_data->samples,
@@ -433,8 +431,8 @@ static void stage_aec(frame_data_t *frame_data)
 
     frame_data->max_ref_energy = aec_calc_max_input_energy(
                                     frame_data->aec_reference_audio_samples,
-                                    aec_state.aec_main_state.shared_state->num_x_channels);
-    frame_data->aec_corr_factor = aec_calc_corr_factor(&aec_state.aec_main_state, 0);
+                                    aec_state.state.shared_state.num_x_channels);
+    frame_data->aec_corr_factor = aec_calc_corr_factor(&aec_state.state.main_state, 0);
     memcpy(frame_data->samples, stage1_output, AEC_MAX_Y_CHANNELS * appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     if (capture_current_frame) {
@@ -471,15 +469,12 @@ static void initialize_pipeline_stages(void)
     configASSERT(delay_buf_state.delay_buf);
 #endif
 
-    aec_init(&aec_state.aec_main_state,
-             &aec_state.aec_shadow_state,
-             &aec_state.aec_shared_state,
-             &aec_state.aec_main_memory_pool[0],
-             &aec_state.aec_shadow_memory_pool[0],
+    aec_init(&aec_state.state,
              AEC_MAX_Y_CHANNELS,
              AEC_MAX_X_CHANNELS,
              AEC_MAIN_FILTER_PHASES,
-             AEC_SHADOW_FILTER_PHASES);
+             AEC_SHADOW_FILTER_PHASES,
+             &tdist);
 }
 
 void audio_pipeline_init(

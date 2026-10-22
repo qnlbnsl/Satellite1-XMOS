@@ -57,6 +57,9 @@ foreach(FFVA_AP ${FFVA_PIPELINES_INT})
     )
     # Per-tile linker map (build dir): input section -> object -> archive, for satellite/bench/xmos_size.py --map.
     target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS} -Wl,--map,${TARGET_NAME}.map)
+    if(PL_NAME STREQUAL fixed_delay)
+        generate_schedule(${TARGET_NAME} "${SATELLITE1_AEC_SCHEDULE}")
+    endif()
     unset(TARGET_NAME)
 
     set(TARGET_NAME tile1_satellite1_firmware_${FFVA_AP})
@@ -78,6 +81,9 @@ foreach(FFVA_AP ${FFVA_PIPELINES_INT})
     )
     # Per-tile linker map (build dir): input section -> object -> archive, for satellite/bench/xmos_size.py --map.
     target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS} -Wl,--map,${TARGET_NAME}.map)
+    if(PL_NAME STREQUAL fixed_delay)
+        generate_schedule(${TARGET_NAME} "${SATELLITE1_AEC_SCHEDULE}")
+    endif()
     unset(TARGET_NAME)
 
     #*********************

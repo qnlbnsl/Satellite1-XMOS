@@ -9,7 +9,6 @@ target_sources(fixed_delay_aec_ic_ns_agc_2mic_2ref
     INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}/fixed_delay/audio_pipeline_t0.c
         ${CMAKE_CURRENT_LIST_DIR}/fixed_delay/audio_pipeline_t1.c
-        ${CMAKE_CURRENT_LIST_DIR}/fixed_delay/aec/aec_process_frame_1thread.c
 )
 target_include_directories(fixed_delay_aec_ic_ns_agc_2mic_2ref
     INTERFACE
@@ -21,13 +20,18 @@ target_link_libraries(fixed_delay_aec_ic_ns_agc_2mic_2ref
         core::general
         rtos::freertos
         rtos::sw_services::generic_pipeline
-        fwk_voice::aec
-        fwk_voice::agc
-        fwk_voice::ic
-        fwk_voice::ns
-        fwk_voice::vnr::features
-        fwk_voice::vnr::inference
+        lib_voice::aec
+        lib_voice::agc
+        lib_voice::ic
+        lib_voice::ns
+        lib_voice::vnr
 )
+
+## The adec and adec_altarch pipelines below are written against fwk_voice,
+## which lib_voice replaced; the Satellite1 runs fixed_delay only. Off until
+## someone ports them.
+option(SATELLITE1_ADEC_PIPELINES "Build the fwk_voice-era adec and adec_altarch pipelines" OFF)
+if(SATELLITE1_ADEC_PIPELINES)
 
 ##******************************************
 ## Create ADEC "prevarch" AEC+IC+NS+AGC 
@@ -101,6 +105,8 @@ target_link_libraries(adec_altarch_aec_ic_ns_agc_2mic_2ref
         fwk_voice::vnr::inference
 )
 
+endif()
+
 ##******************************************
 ## Create empty audio pipeline
 ##******************************************
@@ -127,7 +133,9 @@ target_link_libraries(empty_2mic_2ref
 ## Create aliases for sln_voice example designs
 ##*********************************************
 
-add_library(fph::ffva::ap::adec_altarch ALIAS adec_altarch_aec_ic_ns_agc_2mic_2ref)
 add_library(fph::ffva::ap::fixed_delay ALIAS fixed_delay_aec_ic_ns_agc_2mic_2ref)
-add_library(fph::ffva::ap::adec ALIAS adec_aec_ic_ns_agc_2mic_2ref)
+if(SATELLITE1_ADEC_PIPELINES)
+    add_library(fph::ffva::ap::adec_altarch ALIAS adec_altarch_aec_ic_ns_agc_2mic_2ref)
+    add_library(fph::ffva::ap::adec ALIAS adec_aec_ic_ns_agc_2mic_2ref)
+endif()
 add_library(fph::ffva::ap::empty ALIAS empty_2mic_2ref)

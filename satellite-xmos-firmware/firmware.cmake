@@ -67,28 +67,20 @@ if(ENABLE_ALL_FFVA_PIPELINES)
     set(FFVA_PIPELINES_INT
         bypass
         fixed_delay
-        adec
-        adec_altarch
-        empty
-    )
-
-    set(FFVA_PIPELINES_UA
-        fixed_delay
-        adec
-        adec_altarch
         empty
     )
 else()
     set(FFVA_PIPELINES_INT
-        adec
         fixed_delay
         bypass
     )
-
-    set(FFVA_PIPELINES_UA
-        adec_altarch
-    )
 endif()
+
+# The fixed_delay AEC's compile-time size, "threads mics refs main_phases
+# shadow_phases": lib_voice generates aec_conf.h and the `tdist` schedule from
+# it (lib_voice/aec_schedule.cmake). audio_pipeline_t1.c initialises the AEC
+# with these same values.
+set(SATELLITE1_AEC_SCHEDULE "1 2 2 10 5")
 
 #**********************
 # XMOS Firmware Targets

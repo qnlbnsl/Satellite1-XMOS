@@ -16,10 +16,10 @@
 
 /* Library headers */
 #include "generic_pipeline.h"
-#include "aec_api.h"
-#include "agc_api.h"
-#include "ic_api.h"
-#include "ns_api.h"
+#include "aec.h"
+#include "agc.h"
+#include "ic.h"
+#include "ns.h"
 #include "vnr_features_api.h"
 #include "vnr_inference_api.h"
 
@@ -34,6 +34,7 @@
 #endif
 
 #define VNR_AGC_THRESHOLD (0.5)
+#define VNR_INIT_OUTPUT_PRED (0.5)
 
 #if ON_TILE(0)
 static ic_stage_ctx_t DWORD_ALIGNED ic_stage_state = {};
@@ -162,13 +163,22 @@ static void stage_vnr_and_ic(frame_data_t *frame_data)
               frame_data->samples[1],
               ic_output);
 
-    vnr_pred_state_t *vnr_pred_state = &vnr_pred_stage_state.vnr_pred_state;
-    ic_calc_vnr_pred(&ic_stage_state.state, &vnr_pred_state->input_vnr_pred, &vnr_pred_state->output_vnr_pred);
+    vnr_pred_stage_ctx_t *vnr = &vnr_pred_stage_state;
+    ic_calc_vnr_pred(&ic_stage_state.state, &vnr->input_vnr_pred);
+
+    /* Output VNR from the IC's error spectrum, smoothed like its input VNR */
+    bfp_s32_t feature_patch;
+    int32_t feature_patch_data[VNR_PATCH_WIDTH * VNR_MEL_FILTERS];
+    float_s32_t output_vnr;
+    vnr_extract_features(&vnr->output_feature_state, &feature_patch, feature_patch_data, &ic_stage_state.state.Error_bfp[0]);
+    vnr_inference(&output_vnr, &feature_patch);
+    vnr->output_vnr_pred = float_s32_ema(vnr->output_vnr_pred, output_vnr, ic_stage_state.state.vnr_pred_state.pred_alpha_q30);
 
     float_s32_t agc_vnr_threshold = f32_to_float_s32(VNR_AGC_THRESHOLD);
-    frame_data->vnr_pred_flag = float_s32_gt(vnr_pred_stage_state.vnr_pred_state.output_vnr_pred, agc_vnr_threshold);
+    frame_data->vnr_pred_flag = float_s32_gt(vnr->output_vnr_pred, agc_vnr_threshold);
+    frame_data->output_vnr_pred = vnr->output_vnr_pred;
 
-    ic_adapt(&ic_stage_state.state, vnr_pred_stage_state.vnr_pred_state.input_vnr_pred);
+    ic_adapt(&ic_stage_state.state);
 
     /* Intentionally ignoring comms ch from here on out */
     memcpy(frame_data->samples[0], ic_output, appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
@@ -212,7 +222,8 @@ static void stage_agc(frame_data_t *frame_data)
     int32_t DWORD_ALIGNED agc_output[appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     configASSERT(AGC_FRAME_ADVANCE == appconfAUDIO_PIPELINE_FRAME_ADVANCE);
 
-    agc_stage_state.md.vnr_flag = frame_data->vnr_pred_flag;
+    /* The AGC thresholds the VNR itself, at the profile's vnr_threshold (0.5, as VNR_AGC_THRESHOLD) */
+    agc_stage_state.md.vnr_flag = frame_data->output_vnr_pred;
     agc_stage_state.md.aec_ref_power = frame_data->max_ref_energy;
     agc_stage_state.md.aec_corr_factor = frame_data->aec_corr_factor;
 
@@ -245,6 +256,8 @@ static void initialize_pipeline_stages(void)
     }
 
     ic_init(&ic_stage_state.state);
+    vnr_feature_state_init(&vnr_pred_stage_state.output_feature_state);
+    vnr_pred_stage_state.output_vnr_pred = f32_to_float_s32(VNR_INIT_OUTPUT_PRED);
 
     ns_init(&ns_stage_state.state);
 
