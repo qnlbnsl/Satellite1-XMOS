@@ -55,7 +55,8 @@ foreach(FFVA_AP ${FFVA_PIPELINES_INT})
             fph::ffva::ap::${PL_NAME}
             sln_voice::app::ffva::sp::passthrough
     )
-    target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS})
+    # Per-tile linker map (build dir): input section -> object -> archive, for satellite/bench/xmos_size.py --map.
+    target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS} -Wl,--map,${TARGET_NAME}.map)
     unset(TARGET_NAME)
 
     set(TARGET_NAME tile1_satellite1_firmware_${FFVA_AP})
@@ -75,7 +76,8 @@ foreach(FFVA_AP ${FFVA_PIPELINES_INT})
             fph::ffva::ap::${PL_NAME}
             sln_voice::app::ffva::sp::passthrough
     )
-    target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS})
+    # Per-tile linker map (build dir): input section -> object -> archive, for satellite/bench/xmos_size.py --map.
+    target_link_options(${TARGET_NAME} PRIVATE ${APP_LINK_OPTIONS} -Wl,--map,${TARGET_NAME}.map)
     unset(TARGET_NAME)
 
     #*********************
