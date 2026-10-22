@@ -4,6 +4,7 @@
 #include <platform.h>
 #include <xs1.h>
 #include <xcore/channel.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -43,6 +44,17 @@
 #else
 #define AUDIO_PIPELINE_QUEUE_WAIT_TICKS portMAX_DELAY
 #endif
+
+static int32_t mic_gain_10x(int32_t sample)
+{
+    if (sample > INT32_MAX / 10) {
+        return INT32_MAX;
+    }
+    if (sample < INT32_MIN / 10) {
+        return INT32_MIN;
+    }
+    return sample * 10;
+}
 
 #if ON_TILE(SPEAKER_PIPELINE_TILE_NO)
 rtos_osal_queue_t *ref_input_queue;
@@ -567,6 +579,12 @@ void audio_pipeline_input(void *input_app_data,
                       mic_ptr,
                       frame_count,
                       portMAX_DELAY);
+
+    /* Fixed 10x gain on the PDM mics (develop). Applied before the packaged
+     * input and test patterns replace mic_data, and before the runtime gain. */
+    for (size_t i = 0; i < appconfMIC_PIPELINE_INPUT_CHANNELS * frame_count; ++i) {
+        mic_data[i] = mic_gain_10x(mic_data[i]);
+    }
 
 #if ON_TILE(SPEAKER_PIPELINE_TILE_NO)
     if (packaged_mic_mode) {
