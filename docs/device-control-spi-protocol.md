@@ -268,7 +268,29 @@ Command:
 | `LED_RING_SERVICER_CMD_WRITE_RAW` (`0`) | `0x00` | Write | `3 * LED_RING_NUM_LEDS` bytes | Status-only frame |
 
 For Satellite1, `LED_RING_NUM_LEDS` is `24`, so the raw write payload is
-`72` bytes. The payload is passed directly to `rtos_ws2812_write()`.
+`72` bytes, three per LED in G, R, B order. While the chain control's LED
+pointer is off (the default), the payload is passed directly to
+`rtos_ws2812_write()`.
+
+**LED pointer.** With the chain control module `pointer` (`10`) on and the
+direction task locked (`GET_DOA_SMOOTH` `valid`), the chip draws an arc
+towards the stabilised direction itself, about 30 times a second, with no host
+in the loop (`satellite-xmos-firmware/src/led_ring/led_pointer.c`, a C
+translation of satellite's `prototype/doa/ring.py`):
+
+- The arc is centred at `angle / 15` LEDs (LED `k` at `k * 15` degrees), full
+  brightness split between the two LEDs either side of that position and 0.4
+  of it one LED further out, in colour R, G, B = `0, 80, 255`.
+- It glides to a new direction on a critically damped spring that settles in
+  0.4 s; turning the pointer on starts it at the current direction, at rest.
+- **The host's frame is layered on top.** Every pixel the host's last
+  `WRITE_RAW` lit stays as the host drew it; the arc shows only on the pixels
+  the host left dark (`0, 0, 0`). So a mute overlay composited into the host's
+  frame still wins, and a host that wants the bare arc writes a dark frame.
+- Turning the pointer off shows the host's last frame again at once. Until the
+  direction task has locked, the ring shows the host's frame alone.
+- The pointer writes the ring only when the shown frame changes, so a settled
+  arc costs no LED writes.
 
 The LED ring servicer does not implement read commands.
 
@@ -465,8 +487,8 @@ are little-endian.
 - A blob is sent as float32 in chunks starting at offset 0; the last chunk
   commits it if the crc32 (zlib) of the whole blob matches and every value is in
   bounds. In `MODULE`, a blob's value is the crc32 of its contents.
-- `STATE` flags per module: `1` runs in this firmware's audio path, `2` on, `4`
-  every setting takes effect. This build runs three modules:
+- `STATE` flags per module: `1` runs in this firmware, `2` on, `4` every
+  setting takes effect. This build runs four modules:
   - the microphone trim (`trim`), flag `4` clear, on the four raw mics before
     the echo canceller. Each mic gets one broadband gain, the mean of its 16
     band trims in dB (Q4.28, rounded half up, saturated to int32, then the
@@ -477,6 +499,9 @@ are little-endian.
     trimmed;
   - the echo canceller (`aec`), flag `4` clear: `on` and `BYPASS_ALL` bypass it
     through lib_voice's own bypass; its tail and step size are the build's;
+  - the LED pointer (`pointer`, off by default; see "LED Ring Servicer"), whose
+    only control is its on flag, so its flag `4` is set. `BYPASS_ALL` does not
+    touch the pointer;
   - `playback` (module `32`, after the chain's modules in `STATE`), the speaker
     path's duck, flag `4` set.
 - The fingerprint is the first 8 bytes of the sha256 of `chain_contract.jsonl`,

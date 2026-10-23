@@ -21,3 +21,8 @@ void doa_task_start(doa_runtime_t *runtime, unsigned priority);
  * [ref0, ref1, mic0..mic3][frame_count] int32, as audio_pipeline_input()
  * holds it. Drops the frame when the task is still busy with earlier ones. */
 void doa_task_push_frame(const int32_t *ref_and_mics, size_t frame_count);
+
+/* The stabilised target as GET_DOA_SMOOTH reports it, in degrees in the LED
+ * frame. Returns 1 and sets *deg once the first lock is in; returns 0 before
+ * that or before doa_task_start. Call on DOA_TILE_NO. */
+int doa_task_smooth_deg(float *deg);

@@ -115,6 +115,23 @@ static void doa_task(void *arg)
     }
 }
 
+int doa_task_smooth_deg(float *deg)
+{
+    doa_reading_t smooth;
+
+    if (!doa_started) {
+        return 0;
+    }
+    int state = rtos_osal_critical_enter();
+    smooth = doa_runtime->smooth;
+    rtos_osal_critical_exit(state);
+    if (!smooth.valid) {
+        return 0;
+    }
+    *deg = (float) smooth.doa_mrad * 0.057295779513082f;   /* 180 / (1000 * pi) */
+    return 1;
+}
+
 void doa_task_start(doa_runtime_t *runtime, unsigned priority)
 {
     doa_geometry_t geom;

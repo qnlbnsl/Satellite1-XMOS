@@ -16,14 +16,15 @@
 #define CHAIN_CONTRACT_TABLES
 #include "chain_control.h"
 
-/* Modules this firmware runs in its audio path. `applied` is 1 only when every
- * one of the module's settings takes effect. Trim applies one broadband gain per
- * mic and plays no chime; the echo canceller honours on and bypass, while its
- * tail and step size are fixed by the build. Playback is the speaker path's
- * duck (playback_duck.c), every setting live. */
+/* Modules this firmware runs. `applied` is 1 only when every one of the
+ * module's settings takes effect. Trim applies one broadband gain per mic and
+ * plays no chime; the echo canceller honours on and bypass, while its tail and
+ * step size are fixed by the build. The LED pointer has only its on flag.
+ * Playback is the speaker path's duck (playback_duck.c), every setting live. */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_TRIM, 0 },
     { CHAIN_MODULE_AEC, 0 },
+    { CHAIN_MODULE_POINTER, 1 },
     { CHAIN_MODULE_PLAYBACK, 1 },
 };
 
@@ -632,10 +633,12 @@ void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_
     int aec = module_index(CHAIN_MODULE_AEC);
     int trim = module_index(CHAIN_MODULE_TRIM);
     int trim_on = !cc->bypass_all && trim >= 0 && cc->modules[trim].on;
+    int pointer = module_index(CHAIN_MODULE_POINTER);
 
     revert_tap(cc, now_ms);
     out->tap = cc->tap;
     out->aec_bypass = cc->bypass_all || (aec >= 0 && !cc->modules[aec].on);
+    out->pointer = pointer >= 0 && cc->modules[pointer].on;
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = trim_on ? cc->trim_gain[m] : CHAIN_TRIM_UNITY;
     }

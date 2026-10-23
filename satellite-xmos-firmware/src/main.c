@@ -33,6 +33,7 @@
 #include "dfu_servicer.h"
 #include "gpio/gpio_servicer.h"
 #include "led_ring/led_ring_servicer.h"
+#include "led_ring/led_pointer_task.h"
 #include "doa/doa_task.h"
 
 
@@ -1016,6 +1017,9 @@ void startup_task(void *arg)
 #endif
 
 #if ON_TILE(WS2812_TILE_NO)
+    /* Before the servicer: host frames go through the pointer's layering. */
+    led_pointer_task_start(ws2812_ctx, appconfLED_TASK_PRIORITY);
+
     servicer_t servicer_led_ring;
     led_ring_servicer_init(&servicer_led_ring);
     

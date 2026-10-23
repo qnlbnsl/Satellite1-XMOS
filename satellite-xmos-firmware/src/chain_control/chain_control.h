@@ -35,11 +35,12 @@ typedef struct {
     struct { uint8_t engaged; uint32_t since_ms; int16_t applied_cdb; } duck;
 } chain_control_t;
 
-/* What the audio path applies to one frame. */
+/* What the audio path, and the LED pointer beside it, apply to one frame. */
 typedef struct {
     uint8_t tap;            /* CHAIN_TAP_*: what lane 0 carries */
     uint8_t aec_bypass;     /* 1: the echo canceller passes the mics through */
     int32_t mic_gain[CHAIN_MICS];  /* trim per mic, Q4.28; CHAIN_TRIM_UNITY when trim is off */
+    uint8_t pointer;        /* 1: the LED pointer draws (the pointer module is on) */
 } chain_frame_ctrl_t;
 
 /* What the speaker path applies to one frame. */

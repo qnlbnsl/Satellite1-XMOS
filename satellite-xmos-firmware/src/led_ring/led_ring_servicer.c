@@ -11,6 +11,7 @@
 
 #include "led_ring_cmds.h"
 #include "rtos_ws2812.h"
+#include "led_pointer_task.h"
 
 #include "FreeRTOS.h"
 
@@ -60,7 +61,7 @@ static control_ret_t led_ring_servicer_write_cmd(control_resid_t resid, control_
     {
         debug_printf("GPIO_CONTROLLER_SERVICER_RESID_WRITE_PORT\n");
         debug_printf("%d %d %d\n", payload[0], payload[1], payload[2]);
-        rtos_ws2812_write( ws2812_ctx, &payload[0] );
+        led_ring_show_host( ws2812_ctx, &payload[0] );
         break;
     }
     

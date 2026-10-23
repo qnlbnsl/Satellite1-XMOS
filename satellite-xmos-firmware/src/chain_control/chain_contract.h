@@ -3,12 +3,12 @@
  * with chain_contract.jsonl beside it. Do not edit: chain_contract_check.cmake fails the build
  * when this file was changed by hand or no longer matches the projection. */
 #pragma once
-#define CHAIN_CONTRACT_HEADER_SHA256 "94ab4723c9c4be8035f017231f422596d7e3db5d0c514cb3c37ef3fa87da829f"
+#define CHAIN_CONTRACT_HEADER_SHA256 "510158bb0d12170d6058e680ce426b566ca2c9b9114d21dd943ab468f4a97d1c"
 
 #include <stdint.h>
 
 #define CHAIN_CONTRACT_VERSION 1
-#define CHAIN_CONTRACT_FINGERPRINT 0x1e9e29ac5fa9278aULL
+#define CHAIN_CONTRACT_FINGERPRINT 0xb4e8d6c4c6191142ULL
 #define CHAIN_RATE 16000
 #define CHAIN_HOP 240
 #define CHAIN_MICS 4
@@ -72,8 +72,9 @@
 #define CHAIN_MODULE_POST 7
 #define CHAIN_MODULE_GAIN 8
 #define CHAIN_MODULE_ACTIVITY 9
+#define CHAIN_MODULE_POINTER 10
 #define CHAIN_MODULE_PLAYBACK 32
-#define CHAIN_MODULE_COUNT 10
+#define CHAIN_MODULE_COUNT 11
 
 /* Module hashes: sha256 of each module's line in the projection, first 8 bytes */
 #define CHAIN_HASH_1 0xf5714c8b89377b70ULL
@@ -85,6 +86,7 @@
 #define CHAIN_HASH_7 0xe5bfba13f56afef5ULL
 #define CHAIN_HASH_8 0xc21a120b65e562e7ULL
 #define CHAIN_HASH_9 0x7c6f45b17c9cb6b8ULL
+#define CHAIN_HASH_10 0xb5c625c17f9a2a69ULL
 #define CHAIN_HASH_32 0x180a7e51bc9c63e6ULL
 
 /* Settings */
@@ -198,6 +200,7 @@ static const chain_module_spec_t chain_modules[CHAIN_MODULE_COUNT] = {
     { CHAIN_MODULE_POST, 0, CHAIN_HASH_7, chain_post_variants, 2, chain_post_settings, 1 },
     { CHAIN_MODULE_GAIN, 0, CHAIN_HASH_8, 0, 0, chain_gain_settings, 3 },
     { CHAIN_MODULE_ACTIVITY, 1, CHAIN_HASH_9, 0, 0, chain_activity_settings, 1 },
+    { CHAIN_MODULE_POINTER, 0, CHAIN_HASH_10, 0, 0, 0, 0 },
     { CHAIN_MODULE_PLAYBACK, 1, CHAIN_HASH_32, 0, 0, chain_playback_settings, 3 },
 };
 #endif /* CHAIN_CONTRACT_TABLES */

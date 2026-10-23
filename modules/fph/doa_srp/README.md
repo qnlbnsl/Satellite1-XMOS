@@ -3,7 +3,9 @@
 A C port of the Pi prototype in hermes-os `satellite/prototype/doa`
 (`srp.py`, `stabiliser.py`, `geometry.py`), which works live on the bench
 board. Same constants, same gates, same hysteresis rules. The ring glide
-(`ring.py`) stays on the host and is not ported.
+(`ring.py`) is not part of this module: the LED pointer in
+`satellite-xmos-firmware/src/led_ring/led_pointer.c` ports it and reads this
+module's stabilised target.
 
 **On by default** (CMake `-DSATELLITE1_DOA=OFF` leaves it out). It fits since the lib_voice swap: the debug build's tile 1 is 447,076 of 524,288 B with DOA on, against 414,652 with it off (on develop before the swap, DOA on overflowed tile 1 by 15,844 B).
 

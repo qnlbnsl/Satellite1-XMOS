@@ -10,4 +10,5 @@
 {"id":7,"on":false,"settings":[[1,"float","dB",-30.0,0.0,null,-12.0,[],[]]],"variants":[[1,"wiener"],[2,"xmos"]]}
 {"id":8,"on":false,"settings":[[1,"float","dBFS",-40.0,-3.0,null,-20.0,[],[]],[2,"float","dB",0.0,60.0,null,30.0,[],[]],[3,"enum","",null,null,null,1,[[0,"always"],[1,"voice"]],[]]],"variants":[]}
 {"id":9,"on":true,"settings":[[1,"float","",0.0,1.0,null,0.5,[],[]]],"variants":[]}
+{"id":10,"on":false,"settings":[],"variants":[]}
 {"id":32,"on":true,"settings":[[1,"float","dB",0.0,40.0,null,25.0,[],[]],[2,"int","ms",0,500,null,50,[],[]],[3,"float","s",1.0,60.0,null,15.0,[],[]]],"variants":[]}
