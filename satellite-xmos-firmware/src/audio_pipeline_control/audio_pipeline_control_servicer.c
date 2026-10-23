@@ -40,6 +40,8 @@ static control_cmd_info_t audio_pipeline_mic_settings_cmd_map[] = {
       sizeof(heap_stats_t), CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_VNR, 1,
       sizeof(vnr_reading_t), CMD_READ_ONLY },
+    { AUDIO_PIPELINE_SETTINGS_CMD_GET_BUILD_VARIANT, 1,
+      sizeof(build_variant_t), CMD_READ_ONLY },
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_OUTPUT_PACKAGED_SNAPSHOT, 1,
       sizeof(mic_output_packaged_snapshot_t), CMD_READ_ONLY },
@@ -275,6 +277,21 @@ static control_ret_t audio_pipeline_servicer_read_cmd(
         int lock = rtos_osal_critical_enter();
         memcpy(payload, &audio_pipeline_vnr_reading, sizeof(audio_pipeline_vnr_reading));
         rtos_osal_critical_exit(lock);
+#else
+        ret = CONTROL_BAD_COMMAND;
+#endif
+        payload[-1] = ret;
+        return ret;
+    }
+
+    if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_BUILD_VARIANT) {
+#if ON_TILE(0)
+        if (resid != AUDIO_PIPELINE_MIC_OUTPUT_SETTINGS_RESID) {
+            ret = CONTROL_BAD_COMMAND;
+            payload[-1] = ret;
+            return ret;
+        }
+        memcpy(payload, &audio_pipeline_build_variant, sizeof(audio_pipeline_build_variant));
 #else
         ret = CONTROL_BAD_COMMAND;
 #endif

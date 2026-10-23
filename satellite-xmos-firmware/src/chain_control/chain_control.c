@@ -23,7 +23,9 @@
  * Playback is the speaker path's duck (playback_duck.c), every setting live. */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_TRIM, 0 },
-    { CHAIN_MODULE_AEC, 0 },
+#if !defined(SATELLITE1_VARIANT_AEC_PHASES) || SATELLITE1_VARIANT_AEC_PHASES != 0
+    { CHAIN_MODULE_AEC, 0 },           /* absent from a variant built without it */
+#endif
     { CHAIN_MODULE_POINTER, 1 },
     { CHAIN_MODULE_PLAYBACK, 1 },
 };

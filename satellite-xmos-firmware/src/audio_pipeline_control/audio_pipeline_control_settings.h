@@ -140,6 +140,24 @@ typedef struct
 /* Written by the pipeline on tile 0, read on resource 230 under a critical section. */
 extern vnr_reading_t audio_pipeline_vnr_reading;
 
+/* Which voice-chain stages this image was built with (firmware.cmake,
+ * "Voice-chain variant"). A phase count of 0 means the stage is not built. */
+#define BUILD_VARIANT_LAYOUT 1
+typedef struct
+{
+    uint8_t layout;      /* BUILD_VARIANT_LAYOUT */
+    uint8_t aec_phases;  /* echo canceller main filter phases, 15 ms each */
+    uint8_t ic_phases;   /* interference canceller filter phases */
+    uint8_t vnr;         /* voice-activity score */
+    uint8_t ns;          /* noise suppressor */
+    uint8_t agc;         /* gain control */
+    uint8_t doa;         /* direction finder */
+    uint8_t debug;       /* development debug build */
+} build_variant_t;
+
+/* Defined in the pipeline's tile-0 stage file, which the variant options reach. */
+extern const build_variant_t audio_pipeline_build_variant;
+
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
 typedef struct
 {

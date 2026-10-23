@@ -84,7 +84,53 @@ endif()
 # it (lib_voice/aec_schedule.cmake). audio_pipeline_t1.c initialises the AEC
 # with these same values.
 # Four mics against one reference, the mono mix of the two speaker channels.
-set(SATELLITE1_AEC_SCHEDULE "1 4 1 10 5")
+# SATELLITE1_AEC_PHASES below sets main_phases; 0 still generates the 10-phase
+# schedule, because the stage files compile against aec_conf.h either way.
+set(SATELLITE1_AEC_SHADOW_PHASES 5)
+
+#**********************
+# Voice-chain variant
+# Which stock stages the fixed_delay image carries. The defaults are the full
+# chain. bench/build-xmos-variants.py in the satellite repo builds every
+# combination; GET_BUILD_VARIANT (resource 230, command 34) reads it back.
+#**********************
+set(SATELLITE1_AEC_PHASES 10 CACHE STRING "Echo canceller main filter phases of 15 ms: 10, 8, or 0 for none")
+set(SATELLITE1_IC_PHASES 10 CACHE STRING "Interference canceller filter phases: 10, or 0 for none")
+option(SATELLITE1_VNR "Build the voice-activity score" ON)
+option(SATELLITE1_NS "Build the noise suppressor" ON)
+option(SATELLITE1_AGC "Build the gain control" ON)
+
+if(NOT SATELLITE1_AEC_PHASES MATCHES "^(0|8|10)$")
+    message(FATAL_ERROR "SATELLITE1_AEC_PHASES is 0, 8 or 10, not '${SATELLITE1_AEC_PHASES}'")
+endif()
+if(SATELLITE1_IC_PHASES STREQUAL "8")
+    message(FATAL_ERROR "SATELLITE1_IC_PHASES=8: lib_voice fixes IC_FILTER_PHASES at 10 (modules/voice/lib_voice/api/ic/ic_defines.h)")
+endif()
+if(NOT SATELLITE1_IC_PHASES MATCHES "^(0|10)$")
+    message(FATAL_ERROR "SATELLITE1_IC_PHASES is 0 or 10, not '${SATELLITE1_IC_PHASES}'")
+endif()
+if(NOT SATELLITE1_IC_PHASES STREQUAL "0" AND NOT SATELLITE1_VNR)
+    message(FATAL_ERROR "The interference canceller adapts on the voice-activity score: SATELLITE1_VNR must be ON")
+endif()
+if(SATELLITE1_AGC AND NOT SATELLITE1_VNR)
+    message(FATAL_ERROR "The gain control gates on the voice-activity score: SATELLITE1_VNR must be ON")
+endif()
+
+if(SATELLITE1_AEC_PHASES STREQUAL "0")
+    set(SATELLITE1_AEC_SCHEDULE "1 4 1 10 ${SATELLITE1_AEC_SHADOW_PHASES}")
+else()
+    set(SATELLITE1_AEC_SCHEDULE "1 4 1 ${SATELLITE1_AEC_PHASES} ${SATELLITE1_AEC_SHADOW_PHASES}")
+endif()
+
+# Only the files that read the variant get it, so the rest of the build is the
+# same object for every variant and comes from the compiler cache.
+set_source_files_properties(
+    ${CMAKE_CURRENT_LIST_DIR}/audio_pipelines/reference/fixed_delay/audio_pipeline_t0.c
+    ${CMAKE_CURRENT_LIST_DIR}/audio_pipelines/reference/fixed_delay/audio_pipeline_t1.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/chain_control/chain_control.c
+    PROPERTIES COMPILE_DEFINITIONS
+        "SATELLITE1_VARIANT_AEC_PHASES=${SATELLITE1_AEC_PHASES};SATELLITE1_VARIANT_IC_PHASES=${SATELLITE1_IC_PHASES};SATELLITE1_VARIANT_VNR=$<BOOL:${SATELLITE1_VNR}>;SATELLITE1_VARIANT_NS=$<BOOL:${SATELLITE1_NS}>;SATELLITE1_VARIANT_AGC=$<BOOL:${SATELLITE1_AGC}>"
+)
 
 #**********************
 # XMOS Firmware Targets

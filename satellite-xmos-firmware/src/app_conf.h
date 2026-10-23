@@ -85,6 +85,17 @@
 #define appconfAUDIO_PIPELINE_SKIP_AGC           1
 #endif
 
+/* The voice-chain variant (firmware.cmake, "Voice-chain variant"). CMake sets
+ * SATELLITE1_VARIANT_* on the pipeline stage files and chain_control.c only;
+ * every other file sees the full chain's defaults below. */
+#if defined(SATELLITE1_VARIANT_AEC_PHASES) && !appconfPIPELINE_BYPASS
+#define appconfAUDIO_PIPELINE_SKIP_AEC           (SATELLITE1_VARIANT_AEC_PHASES == 0)
+#define appconfAUDIO_PIPELINE_SKIP_IC            (SATELLITE1_VARIANT_IC_PHASES == 0)
+#define appconfAUDIO_PIPELINE_SKIP_VNR           (!SATELLITE1_VARIANT_VNR)
+#define appconfAUDIO_PIPELINE_SKIP_NS            (!SATELLITE1_VARIANT_NS)
+#define appconfAUDIO_PIPELINE_SKIP_AGC           (!SATELLITE1_VARIANT_AGC)
+#endif
+
 #ifndef appconfAUDIO_PIPELINE_SKIP_STATIC_DELAY
 #define appconfAUDIO_PIPELINE_SKIP_STATIC_DELAY  0
 #endif
@@ -97,12 +108,29 @@
 #define appconfAUDIO_PIPELINE_SKIP_IC_AND_VNR    0
 #endif
 
+/* The interference canceller and the voice-activity score, one switch each. */
+#ifndef appconfAUDIO_PIPELINE_SKIP_IC
+#define appconfAUDIO_PIPELINE_SKIP_IC            appconfAUDIO_PIPELINE_SKIP_IC_AND_VNR
+#endif
+
+#ifndef appconfAUDIO_PIPELINE_SKIP_VNR
+#define appconfAUDIO_PIPELINE_SKIP_VNR           appconfAUDIO_PIPELINE_SKIP_IC_AND_VNR
+#endif
+
 #ifndef appconfAUDIO_PIPELINE_SKIP_NS
 #define appconfAUDIO_PIPELINE_SKIP_NS            0
 #endif
 
 #ifndef appconfAUDIO_PIPELINE_SKIP_AGC
 #define appconfAUDIO_PIPELINE_SKIP_AGC           0
+#endif
+
+/* The canceller adapts on the voice score, and the AGC gates its gain on it. */
+#if !appconfAUDIO_PIPELINE_SKIP_IC && appconfAUDIO_PIPELINE_SKIP_VNR
+#error "the interference canceller needs the voice-activity score"
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_AGC && appconfAUDIO_PIPELINE_SKIP_VNR
+#error "the gain control needs the voice-activity score"
 #endif
 
 #ifndef appconfAUDIO_PIPELINE_STORE_IC_AUDIO 

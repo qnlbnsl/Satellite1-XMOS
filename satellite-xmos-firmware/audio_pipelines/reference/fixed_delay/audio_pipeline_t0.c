@@ -22,6 +22,7 @@
 #include "ns.h"
 #include "vnr_features_api.h"
 #include "vnr_inference_api.h"
+#include "vnr.h"
 
 /* App headers */
 #include "app_conf.h"
@@ -37,11 +38,34 @@
 #define VNR_AGC_THRESHOLD (0.5)
 #define VNR_INIT_OUTPUT_PRED (0.5)
 
+/* What this image was built with, for GET_BUILD_VARIANT on resource 230. */
+const build_variant_t audio_pipeline_build_variant = {
+    .layout = BUILD_VARIANT_LAYOUT,
+    .aec_phases = appconfAUDIO_PIPELINE_SKIP_AEC ? 0 : AEC_MAIN_FILTER_PHASES,
+    .ic_phases = appconfAUDIO_PIPELINE_SKIP_IC ? 0 : IC_FILTER_PHASES,
+    .vnr = !appconfAUDIO_PIPELINE_SKIP_VNR,
+    .ns = !appconfAUDIO_PIPELINE_SKIP_NS,
+    .agc = !appconfAUDIO_PIPELINE_SKIP_AGC,
+    .doa = appconfDOA_ENABLED,
+    .debug = appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG,
+};
+
 #if ON_TILE(0)
+#if !appconfAUDIO_PIPELINE_SKIP_IC
 static ic_stage_ctx_t DWORD_ALIGNED ic_stage_state = {};
+#elif !appconfAUDIO_PIPELINE_SKIP_VNR
+/* The voice score on mic 0 alone, with the IC's smoothing */
+static vnr_state_t DWORD_ALIGNED vnr_only_state = {};
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_VNR
 static vnr_pred_stage_ctx_t DWORD_ALIGNED vnr_pred_stage_state = {};
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_NS
 static ns_stage_ctx_t DWORD_ALIGNED ns_stage_state = {};
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
 static agc_stage_ctx_t DWORD_ALIGNED agc_stage_state = {};
+#endif
 
 #define AUDIO_PIPELINE_FRAME_POOL_DEPTH 3
 
@@ -182,7 +206,30 @@ static int audio_pipeline_output_i(frame_data_t *frame_data,
 
 static void stage_vnr_and_ic(frame_data_t *frame_data)
 {
-#if appconfAUDIO_PIPELINE_SKIP_IC_AND_VNR
+#if appconfAUDIO_PIPELINE_SKIP_IC
+    /* No canceller: its tap carries the stage's input */
+    if (frame_data->chain_tap == CHAIN_TAP_CANCELLER) {
+        memcpy(frame_data->chain_tap_samples, frame_data->samples[0], sizeof(frame_data->chain_tap_samples));
+    }
+#if !appconfAUDIO_PIPELINE_SKIP_VNR
+    vnr_pred_stage_ctx_t *vnr = &vnr_pred_stage_state;
+    float_s32_t raw_vnr;
+    vnr_process_frame(&vnr_only_state, &raw_vnr, frame_data->samples[0]);
+    vnr->output_vnr_pred = float_s32_ema(vnr->output_vnr_pred, raw_vnr, Q30(IC_INIT_VNR_PRED_ALPHA));
+    vnr->input_vnr_pred = vnr->output_vnr_pred;
+
+    float_s32_t agc_vnr_threshold = f32_to_float_s32(VNR_AGC_THRESHOLD);
+    frame_data->vnr_pred_flag = float_s32_gt(vnr->output_vnr_pred, agc_vnr_threshold);
+    frame_data->output_vnr_pred = vnr->output_vnr_pred;
+
+    /* No canceller, so its input and output are the same signal */
+    int lock = rtos_osal_critical_enter();
+    audio_pipeline_vnr_reading.frame_counter++;
+    audio_pipeline_vnr_reading.input_vnr = float_s32_to_f32(vnr->output_vnr_pred);
+    audio_pipeline_vnr_reading.output_vnr = float_s32_to_f32(vnr->output_vnr_pred);
+    audio_pipeline_vnr_reading.output_vnr_raw = float_s32_to_f32(raw_vnr);
+    rtos_osal_critical_exit(lock);
+#endif
 #else
     int32_t DWORD_ALIGNED ic_output[appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     ic_filter(&ic_stage_state.state,
@@ -233,6 +280,10 @@ static void stage_vnr_and_ic(frame_data_t *frame_data)
 static void stage_ns(frame_data_t *frame_data)
 {
 #if appconfAUDIO_PIPELINE_SKIP_NS
+    /* No noise suppressor: its tap carries the stage's input */
+    if (frame_data->chain_tap == CHAIN_TAP_POST) {
+        memcpy(frame_data->chain_tap_samples, frame_data->samples[0], sizeof(frame_data->chain_tap_samples));
+    }
 #else
     int32_t DWORD_ALIGNED ns_output[appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     configASSERT(NS_FRAME_ADVANCE == appconfAUDIO_PIPELINE_FRAME_ADVANCE);
@@ -295,15 +346,25 @@ static void initialize_pipeline_stages(void)
                                      RTOS_OSAL_NO_WAIT) == RTOS_OSAL_SUCCESS);
     }
 
+#if !appconfAUDIO_PIPELINE_SKIP_IC
     ic_init(&ic_stage_state.state);
+#elif !appconfAUDIO_PIPELINE_SKIP_VNR
+    vnr_state_init(&vnr_only_state);
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_VNR
     vnr_feature_state_init(&vnr_pred_stage_state.output_feature_state);
     vnr_pred_stage_state.output_vnr_pred = f32_to_float_s32(VNR_INIT_OUTPUT_PRED);
+#endif
 
+#if !appconfAUDIO_PIPELINE_SKIP_NS
     ns_init(&ns_stage_state.state);
+#endif
 
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
     agc_init(&agc_stage_state.state, &AGC_PROFILE_ASR);
     agc_stage_state.md.aec_ref_power = AGC_META_DATA_NO_AEC;
     agc_stage_state.md.aec_corr_factor = AGC_META_DATA_NO_AEC;
+#endif
 }
 
 void audio_pipeline_init(

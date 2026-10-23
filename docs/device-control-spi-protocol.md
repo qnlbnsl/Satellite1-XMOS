@@ -452,6 +452,21 @@ except the last four bytes: `total_bytes` (`configTOTAL_HEAP_SIZE`),
 reserved bytes. Peak heap use is `total_bytes - min_ever_free_bytes`; task
 stacks are inside it.
 
+### Audio Pipeline Build Variant
+
+Resource `230` (tile 0) reports which voice-chain stages the flashed image was
+built with (`satellite-xmos-firmware/firmware.cmake`, "Voice-chain variant").
+The id is fixed.
+
+| Command | ID | Encoded value | Direction | Command-map payload length | SPI frame payload length |
+| --- | --- | --- | --- | --- | --- |
+| `AUDIO_PIPELINE_SETTINGS_CMD_GET_BUILD_VARIANT` | `34` | `0xA2` | Read | 8 bytes | 9 bytes |
+
+`build_variant_t` after the status byte, one `uint8` each: `layout` (`1`),
+`aec_phases` (echo canceller main filter phases of 15 ms, `0` when not
+built), `ic_phases` (interference canceller filter phases, `0` when not
+built), then `vnr`, `ns`, `agc`, `doa` and `debug`, each `1` when built.
+
 ### Chain Control
 
 Resource `233` (`CHAIN_RESOURCE_ID`, `satellite-xmos-firmware/src/chain_control`)

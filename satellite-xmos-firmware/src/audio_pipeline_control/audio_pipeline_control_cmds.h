@@ -37,6 +37,9 @@ enum e_audio_pipeline_settings_cmds
 
     /* Fixed id. Served on resource 230 (tile 0) only: vnr_reading_t. */
     AUDIO_PIPELINE_SETTINGS_CMD_GET_VNR = 33,
+
+    /* Fixed id. Served on resource 230 (tile 0) only: build_variant_t. */
+    AUDIO_PIPELINE_SETTINGS_CMD_GET_BUILD_VARIANT = 34,
 };
 
 typedef enum

@@ -36,7 +36,9 @@ _Static_assert(CHAIN_MICS == appconfMIC_PIPELINE_INPUT_CHANNELS && CHAIN_MICS ==
 #if appconfINPUT_SAMPLES_MIC_DELAY_MS != 0
 static stage_delay_ctx_t DWORD_ALIGNED delay_buf_state = {};
 #endif
+#if !appconfAUDIO_PIPELINE_SKIP_AEC
 static aec_ctx_t DWORD_ALIGNED aec_state = {};
+#endif
 
 #define AUDIO_PIPELINE_FRAME_POOL_DEPTH 3
 
@@ -431,6 +433,9 @@ static void mix_reference_to_mono(
 static void stage_aec(frame_data_t *frame_data)
 {
 #if appconfAUDIO_PIPELINE_SKIP_AEC
+    /* No echo canceller: its lanes and the tile-0 input carry the trimmed mics, as a bypass does */
+    chain_trim_frame(&frame_data->aec_output[0][0], &frame_data->mic_samples_passthrough[0][0], frame_data->chain_mic_gain);
+    memcpy(frame_data->samples, frame_data->aec_output, appconfMIC_PIPELINE_PROC_CHANNELS * appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
 #else
     int32_t DWORD_ALIGNED y[AEC_MAX_Y_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     int32_t DWORD_ALIGNED x[AEC_MAX_X_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
@@ -508,12 +513,14 @@ static void initialize_pipeline_stages(void)
     configASSERT(delay_buf_state.delay_buf);
 #endif
 
+#if !appconfAUDIO_PIPELINE_SKIP_AEC
     aec_init(&aec_state.state,
              AEC_MAX_Y_CHANNELS,
              AEC_MAX_X_CHANNELS,
              AEC_MAIN_FILTER_PHASES,
              AEC_SHADOW_FILTER_PHASES,
              &tdist);
+#endif
 }
 
 void audio_pipeline_init(
