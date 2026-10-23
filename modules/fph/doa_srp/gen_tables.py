@@ -32,7 +32,7 @@ GEOMETRY = {
     "band_hi_hz": 4000.0,
 }
 
-# tuning.toml as of 2026-10-21, plus playback_dbfs -60 and playback_hold_s 0.25.
+# tuning.toml as of 2026-10-23 (k_max 12 -> 6), plus playback_dbfs -60 and playback_hold_s 0.25.
 # Order and types follow doa_tuning_t.
 TUNING = [
     ("floor_rise", "f", 0.5),
@@ -46,7 +46,7 @@ TUNING = [
     ("margin_min", "f", 0.15),
     ("k_base", "i", 4),
     ("k_per_led", "i", 1),
-    ("k_max", "i", 12),
+    ("k_max", "i", 6),
     ("follow_tau_s", "f", 0.2),
     ("playback_dbfs", "f", -60.0),
     ("playback_hold_s", "f", 0.25),
