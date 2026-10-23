@@ -5,6 +5,12 @@
 foreach(CORE_MODULE clock_control l2_cache legacy_compat multitile_support otpinfo random trycatch utils)
     add_subdirectory(core/modules/${CORE_MODULE})
 endforeach()
+## Every FFT in this firmware is 512-point (AEC, IC, NS, VNR, DOA), so generate
+## xcore_math's twiddle tables for 512 rather than ship its 1024-point ones.
+## The 512-point DIT table is the 1024-point one's prefix and the DIF table its
+## suffix, which is how XMATH_DIT/DIF_REAL_FFT_LUT index them.
+set(XMATH_GEN_FFT_LUT ON)
+set(XMATH_MAX_FFT_LEN_LOG2 9)
 add_subdirectory(xcore_math/lib_xcore_math)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL XCORE_XS3A) OR (${CMAKE_SYSTEM_NAME} STREQUAL XCORE_XS2A))
