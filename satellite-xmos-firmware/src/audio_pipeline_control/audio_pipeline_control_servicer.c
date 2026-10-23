@@ -27,6 +27,10 @@ extern void fixed_delay_aec_capture_get_selected_chunk(
 
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 
+#if ON_TILE(0)
+vnr_reading_t audio_pipeline_vnr_reading;
+#endif
+
 static control_cmd_info_t audio_pipeline_mic_settings_cmd_map[] = {
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_SETTINGS, 1,
       sizeof(mic_output_pipeline_settings_t), CMD_READ_ONLY },
@@ -34,6 +38,8 @@ static control_cmd_info_t audio_pipeline_mic_settings_cmd_map[] = {
       sizeof(mic_output_pipeline_settings_update_t), CMD_WRITE_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS, 1,
       sizeof(heap_stats_t), CMD_READ_ONLY },
+    { AUDIO_PIPELINE_SETTINGS_CMD_GET_VNR, 1,
+      sizeof(vnr_reading_t), CMD_READ_ONLY },
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_OUTPUT_PACKAGED_SNAPSHOT, 1,
       sizeof(mic_output_packaged_snapshot_t), CMD_READ_ONLY },
@@ -255,6 +261,23 @@ static control_ret_t audio_pipeline_servicer_read_cmd(
         out.uptime_ticks = xTaskGetTickCount();
         out.tile = THIS_XCORE_TILE;
         memcpy(payload, &out, sizeof(out));
+        payload[-1] = ret;
+        return ret;
+    }
+
+    if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_VNR) {
+#if ON_TILE(0)
+        if (resid != AUDIO_PIPELINE_MIC_OUTPUT_SETTINGS_RESID) {
+            ret = CONTROL_BAD_COMMAND;
+            payload[-1] = ret;
+            return ret;
+        }
+        int lock = rtos_osal_critical_enter();
+        memcpy(payload, &audio_pipeline_vnr_reading, sizeof(audio_pipeline_vnr_reading));
+        rtos_osal_critical_exit(lock);
+#else
+        ret = CONTROL_BAD_COMMAND;
+#endif
         payload[-1] = ret;
         return ret;
     }

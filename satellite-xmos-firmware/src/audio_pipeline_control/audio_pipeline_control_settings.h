@@ -127,6 +127,19 @@ typedef struct
     uint8_t reserved[3];
 } heap_stats_t;
 
+/* The fixed_delay pipeline's voice-activity (VNR) estimates, 0..1, after its
+ * latest frame. frame_counter 0: no frame has run them yet. */
+typedef struct
+{
+    uint32_t frame_counter;  /* frames through the IC stage since boot */
+    float input_vnr;         /* IC input, smoothed: drives the IC's adaption */
+    float output_vnr;        /* IC output, smoothed: drives the AGC (> 0.5 adapts) */
+    float output_vnr_raw;    /* IC output, this frame's inference before smoothing */
+} vnr_reading_t;
+
+/* Written by the pipeline on tile 0, read on resource 230 under a critical section. */
+extern vnr_reading_t audio_pipeline_vnr_reading;
+
 #if appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
 typedef struct
 {

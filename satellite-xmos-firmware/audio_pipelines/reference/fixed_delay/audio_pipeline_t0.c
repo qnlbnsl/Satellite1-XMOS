@@ -205,6 +205,13 @@ static void stage_vnr_and_ic(frame_data_t *frame_data)
     frame_data->vnr_pred_flag = float_s32_gt(vnr->output_vnr_pred, agc_vnr_threshold);
     frame_data->output_vnr_pred = vnr->output_vnr_pred;
 
+    int lock = rtos_osal_critical_enter();
+    audio_pipeline_vnr_reading.frame_counter++;
+    audio_pipeline_vnr_reading.input_vnr = float_s32_to_f32(ic_stage_state.state.vnr_pred_state.input_vnr_pred);
+    audio_pipeline_vnr_reading.output_vnr = float_s32_to_f32(vnr->output_vnr_pred);
+    audio_pipeline_vnr_reading.output_vnr_raw = float_s32_to_f32(output_vnr);
+    rtos_osal_critical_exit(lock);
+
     ic_adapt(&ic_stage_state.state);
 
     /* Intentionally ignoring comms ch from here on out */
