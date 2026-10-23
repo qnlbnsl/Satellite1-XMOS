@@ -26,3 +26,8 @@ void doa_task_push_frame(const int32_t *ref_and_mics, size_t frame_count);
  * frame. Returns 1 and sets *deg once the first lock is in; returns 0 before
  * that or before doa_task_start. Call on DOA_TILE_NO. */
 int doa_task_smooth_deg(float *deg);
+
+/* The latest stabilised target: returns 1 and its angle in degrees (LED frame) once the
+ * direction finder has locked, else 0. Safe from any task on DOA_TILE_NO; 0 on a build
+ * without the direction task. */
+int doa_task_target(float *deg);

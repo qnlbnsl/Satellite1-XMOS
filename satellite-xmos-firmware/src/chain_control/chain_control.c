@@ -20,7 +20,10 @@
  * module's settings takes effect. Trim applies one broadband gain per mic and
  * plays no chime; the echo canceller honours on and bypass, while its tail and
  * step size are fixed by the build. The LED pointer honours on and its colour.
- * Playback is the speaker path's duck (playback_duck.c), every setting live. */
+ * Playback is the speaker path's duck (playback_duck.c), every setting live.
+ * Fixed by the build: the beams' loading (weights generated at 0.1), the
+ * cancellers' tail (lib_ic at IC_FILTER_PHASES), and the post-filter's floor
+ * and variant (lib_voice ns only). */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_TRIM, 0 },
 #if !defined(SATELLITE1_VARIANT_AEC_PHASES) || SATELLITE1_VARIANT_AEC_PHASES != 0
@@ -28,6 +31,11 @@ static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
 #endif
     { CHAIN_MODULE_POINTER, 1 },
     { CHAIN_MODULE_PLAYBACK, 1 },
+    { CHAIN_MODULE_BEAMS, 0 },
+    { CHAIN_MODULE_CANCELLER, 0 },
+    { CHAIN_MODULE_PICKER, 1 },
+    { CHAIN_MODULE_POST, 0 },
+    { CHAIN_MODULE_GAIN, 1 },
 };
 
 #define TAP_REVERT_MS ((uint32_t)CHAIN_TAP_REVERT_S * 1000u)
@@ -630,18 +638,45 @@ uint8_t chain_control_read(chain_control_t *cc, uint8_t cmd,
     return err;
 }
 
-void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_t *out)
+/* The three readers below take cc NULL for the contract defaults. */
+static int module_on(const chain_control_t *cc, uint8_t id)
 {
-    int aec = module_index(CHAIN_MODULE_AEC);
-    int trim = module_index(CHAIN_MODULE_TRIM);
-    int trim_on = !cc->bypass_all && trim >= 0 && cc->modules[trim].on;
-    int pointer = module_index(CHAIN_MODULE_POINTER);
+    int mi = module_index(id);
+    if (mi < 0) {
+        return 0;
+    }
+    return cc ? !cc->bypass_all && cc->modules[mi].on : chain_modules[mi].on;
+}
 
-    revert_tap(cc, now_ms);
-    out->tap = cc->tap;
-    out->aec_bypass = cc->bypass_all || (aec >= 0 && !cc->modules[aec].on);
-    out->pointer = pointer >= 0 && cc->modules[pointer].on;
-    if (pointer >= 0) {
+static uint8_t module_variant(const chain_control_t *cc, uint8_t id)
+{
+    int mi = module_index(id);
+    if (mi < 0) {
+        return 0;
+    }
+    return cc ? cc->modules[mi].variant : (chain_modules[mi].n_variants ? chain_modules[mi].variants[0] : 0);
+}
+
+/* A scalar setting as a float: an int or enum's value, or a float's. */
+static float setting_value(const chain_control_t *cc, uint8_t module, uint8_t setting)
+{
+    int mi = module_index(module);
+    int si = mi >= 0 ? setting_index(&chain_modules[mi], setting) : -1;
+    if (si < 0) {
+        return 0.0f;
+    }
+    uint32_t bits = cc ? cc->modules[mi].values[si] : chain_modules[mi].settings[si].def;
+    return chain_modules[mi].settings[si].type == CHAIN_TYPE_FLOAT ? bits_float(bits) : (float)(int32_t)bits;
+}
+
+static void frame_modules(const chain_control_t *cc, chain_frame_ctrl_t *out)
+{
+    int pointer = module_index(CHAIN_MODULE_POINTER);
+    int trim_on = cc && module_on(cc, CHAIN_MODULE_TRIM);
+
+    out->aec_bypass = !module_on(cc, CHAIN_MODULE_AEC);
+    out->pointer = cc && pointer >= 0 && cc->modules[pointer].on;
+    if (cc && pointer >= 0) {
         /* An int setting's wire bits are its value; the contract keeps each in 0..255. */
         const chain_module_spec_t *spec = &chain_modules[pointer];
         const uint32_t *v = cc->modules[pointer].values;
@@ -654,6 +689,34 @@ void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = trim_on ? cc->trim_gain[m] : CHAIN_TRIM_UNITY;
     }
+    out->beams_on = (uint8_t)module_on(cc, CHAIN_MODULE_BEAMS);
+    out->canceller_on = (uint8_t)module_on(cc, CHAIN_MODULE_CANCELLER);
+    out->canceller_variant = module_variant(cc, CHAIN_MODULE_CANCELLER);
+    out->picker_on = (uint8_t)module_on(cc, CHAIN_MODULE_PICKER);
+    out->picker_variant = module_variant(cc, CHAIN_MODULE_PICKER);
+    out->post_on = (uint8_t)module_on(cc, CHAIN_MODULE_POST);
+    out->gain_on = (uint8_t)module_on(cc, CHAIN_MODULE_GAIN);
+    out->gain_adapt_on_voice =
+        setting_value(cc, CHAIN_MODULE_GAIN, CHAIN_SETTING_GAIN_ADAPT_ON) != 0.0f;
+    out->picker_margin_db = setting_value(cc, CHAIN_MODULE_PICKER, CHAIN_SETTING_PICKER_MARGIN_DB);
+    out->picker_hold_ms = setting_value(cc, CHAIN_MODULE_PICKER, CHAIN_SETTING_PICKER_HOLD_MS);
+    out->picker_slew_ms = setting_value(cc, CHAIN_MODULE_PICKER, CHAIN_SETTING_PICKER_SLEW_MS);
+    out->picker_background_s = setting_value(cc, CHAIN_MODULE_PICKER, CHAIN_SETTING_PICKER_BACKGROUND_S);
+    out->gain_target_dbfs = setting_value(cc, CHAIN_MODULE_GAIN, CHAIN_SETTING_GAIN_TARGET_DBFS);
+    out->gain_max_gain_db = setting_value(cc, CHAIN_MODULE_GAIN, CHAIN_SETTING_GAIN_MAX_GAIN_DB);
+}
+
+void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_t *out)
+{
+    revert_tap(cc, now_ms);
+    out->tap = cc->tap;
+    frame_modules(cc, out);
+}
+
+void chain_control_frame_defaults(chain_frame_ctrl_t *out)
+{
+    out->tap = CHAIN_TAP_DEFAULT;
+    frame_modules(NULL, out);
 }
 
 void chain_control_playback(chain_control_t *cc, uint32_t now_ms, float applied_db,

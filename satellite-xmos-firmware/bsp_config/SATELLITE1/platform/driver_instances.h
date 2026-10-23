@@ -49,6 +49,8 @@
 #define LED_RING_PORT_PIN    3
 
 extern rtos_intertile_t *intertile_ctx;
+/* The voice chain's tile 0 / tile 1 round trip only, so it never waits behind other traffic */
+extern rtos_intertile_t *intertile_chain_ctx;
 extern rtos_qspi_flash_t *qspi_flash_ctx;
 extern rtos_gpio_t *gpio_ctx_t0;
 extern rtos_gpio_t *gpio_ctx_t1;

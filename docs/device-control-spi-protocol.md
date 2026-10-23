@@ -506,8 +506,8 @@ are little-endian.
   commits it if the crc32 (zlib) of the whole blob matches and every value is in
   bounds. In `MODULE`, a blob's value is the crc32 of its contents.
 - `STATE` flags per module: `1` runs in this firmware, `2` on, `4` every
-  setting takes effect. This build runs four modules:
-  - the microphone trim (`trim`), flag `4` clear, on the four raw mics before
+  setting takes effect. This build runs, with flag `4` as shown:
+  - the microphone trim (`trim`, clear), on the four raw mics before
     the echo canceller. Each mic gets one broadband gain, the mean of its 16
     band trims in dB (Q4.28, rounded half up, saturated to int32, then the
     pipeline's input clamp). The band shape and the chime settings take no effect
@@ -515,20 +515,41 @@ are little-endian.
     at 0 dB at boot and change only when a whole `trims` blob is committed. The
     raw mic lanes stay untrimmed; the AEC lanes, and taps `2` and `3`, are
     trimmed;
-  - the echo canceller (`aec`), flag `4` clear: `on` and `BYPASS_ALL` bypass it
-    through lib_voice's own bypass; its tail and step size are the build's;
+  - `aec` (clear): `on` and `BYPASS_ALL` bypass it through lib_voice's own
+    bypass; its tail and step size are the build's;
+  - `beams` (clear): four superdirective beams at 0/90/180/270 degrees and one
+    blocking signal each (`modules/fph/chain_beams`), on tile 1. The weights are
+    generated at `loading` 0.1. Off, beam k is mic k and its blocking signal the
+    opposite mic;
+  - `canceller` (clear): four stock lib_ic instances on tile 0, y = beam,
+    x = its blocking signal; the variant chooses the VNR its adaption reads
+    (`modules/fph/chain_canceller`). The tail is lib_ic's `IC_FILTER_PHASES`
+    (10, 150 ms). Off, the beams pass through;
+  - `picker` (set): chooses and blends two cleaned beams on tile 1
+    (`modules/fph/chain_picker`). The chip has no wake event, so `hybrid` scores
+    as `quality`. Off, the beam it last led with goes out alone;
+  - `post` (clear): lib_voice ns on tile 1; `floor_db` and the `wiener`
+    variant are not honoured. Off, a pass-through;
+  - `gain` (set): lib_voice agc on tile 1, its output peak held between
+    `target_dbfs` - 3 dB and `target_dbfs`, at most `max_gain_db` of gain,
+    adapting on the leader's VNR when `adapt_on` is `voice`. Off, a
+    pass-through;
   - the LED pointer (`pointer`, off by default; see "LED Ring Servicer"), which
     honours its on flag and its colour, so its flag `4` is set. `BYPASS_ALL`
     does not touch the pointer;
   - `playback` (module `32`, after the chain's modules in `STATE`), the speaker
     path's duck, flag `4` set.
+  `BYPASS_ALL` turns every audio-path module off. Contract defaults leave `post`
+  and `gain` off, so the default lane 0 carries the picker's mix unprocessed
+  until the host turns them on.
 - The fingerprint is the first 8 bytes of the sha256 of `chain_contract.jsonl`,
   the module hash the first 8 bytes of the sha256 of that module's line. The
   nonce is drawn from the reference timer at the first command after boot.
-- The tap picks what output channel 0 (lane 0) carries: `1` mic 0, `2` after
-  the AEC, `3` after beams (no beams on the chip: as `2`), `4` after the IC,
-  `5` after the NS, `6` final (the AGC output, the default). A tap other than
-  `6` reverts to `6` after 600 s and at boot. The stages after the tap still run.
+- The tap picks what output channel 0 (lane 0) carries: `1` mic 0, `2` mic 0
+  after the AEC, `3` the beam the picker last led with, `4` that beam after its
+  canceller, `5` the picker's mix after the post-filter, `6` final (after the
+  gain control, the default). A tap other than `6` reverts to `6` after 600 s
+  and at boot. The stages after the tap still run.
 
 #### Ducking
 

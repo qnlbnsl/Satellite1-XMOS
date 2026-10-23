@@ -35,13 +35,28 @@ typedef struct {
     struct { uint8_t engaged; uint32_t since_ms; int16_t applied_cdb; } duck;
 } chain_control_t;
 
-/* What the audio path, and the LED pointer beside it, apply to one frame. */
+/* What the audio path, and the LED pointer beside it, apply to one frame. A
+ * module that bypass_all switches off reads as off; the pointer ignores it. */
 typedef struct {
     uint8_t tap;            /* CHAIN_TAP_*: what lane 0 carries */
     uint8_t aec_bypass;     /* 1: the echo canceller passes the mics through */
     int32_t mic_gain[CHAIN_MICS];  /* trim per mic, Q4.28; CHAIN_TRIM_UNITY when trim is off */
     uint8_t pointer;        /* 1: the LED pointer draws (the pointer module is on) */
     uint8_t pointer_grb[3]; /* the pointer's arc colour, in WRITE_RAW's GRB order */
+    uint8_t beams_on;
+    uint8_t canceller_on;
+    uint8_t canceller_variant;      /* wire number */
+    uint8_t picker_on;
+    uint8_t picker_variant;         /* wire number */
+    uint8_t post_on;
+    uint8_t gain_on;
+    uint8_t gain_adapt_on_voice;    /* gain.adapt_on is "voice" */
+    float picker_margin_db;
+    float picker_hold_ms;
+    float picker_slew_ms;
+    float picker_background_s;
+    float gain_target_dbfs;
+    float gain_max_gain_db;
 } chain_frame_ctrl_t;
 
 /* What the speaker path applies to one frame. */
@@ -76,6 +91,9 @@ void chain_trim_frame(int32_t *out, const int32_t *in, const int32_t gain[CHAIN_
  * a duck not renewed for duck_max_s. */
 void chain_control_playback(chain_control_t *cc, uint32_t now_ms, float applied_db,
                             chain_playback_ctrl_t *out);
+
+/* The controls with every module at its contract defaults and the default tap. */
+void chain_control_frame_defaults(chain_frame_ctrl_t *out);
 
 /* zlib's crc32 of data[0..len). */
 uint32_t chain_crc32(const uint8_t *data, size_t len);

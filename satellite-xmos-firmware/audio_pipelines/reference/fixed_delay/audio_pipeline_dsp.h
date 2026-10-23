@@ -30,6 +30,13 @@
 #include "ns.h"
 #include "vnr_features_api.h"
 #include "vnr_inference_api.h"
+#include "chain_beams.h"
+#include "chain_canceller.h"
+#include "chain_picker.h"
+
+_Static_assert(CHAIN_BEAMS_HOP == AP_FRAME_ADVANCE && CHAIN_PICKER_HOP == AP_FRAME_ADVANCE &&
+               IC_FRAME_ADVANCE == AP_FRAME_ADVANCE, "the chain modules run on the pipeline's frames");
+_Static_assert(CHAIN_BEAMS_MICS == AP_MAX_Y_CHANNELS, "the beams read every mic after the AEC");
 
 _Static_assert(AEC_MAX_Y_CHANNELS == AP_MAX_Y_CHANNELS && AEC_MAX_X_CHANNELS == AP_MAX_X_CHANNELS,
                "SATELLITE1_AEC_SCHEDULE (firmware.cmake) must match AP_MAX_Y_CHANNELS / AP_MAX_X_CHANNELS");
@@ -63,6 +70,13 @@ typedef struct {
     uint8_t chain_tap;          /* CHAIN_TAP_*: what output channel 0 carries */
     uint8_t chain_aec_bypass;   /* both read from the chain control resource on tile 1 */
     int32_t chain_mic_gain[appconfMIC_PIPELINE_INPUT_CHANNELS]; /* trim, Q4.28, read with them */
+    uint8_t chain_beams_on;
+    uint8_t chain_canceller_on;
+    uint8_t chain_canceller_variant;
+    uint8_t chain_beam;         /* the picker's leader when the frame left tile 1 */
+    uint8_t chain_target_valid; /* the direction finder's stabilised target, as the frame left tile 1 */
+    float chain_target_deg;
+    float chain_scores[CHAIN_BEAMS_COUNT];  /* tile 0: each canceller's smoothed input VNR */
     int32_t vnr_pred_flag;
     float_s32_t output_vnr_pred;
     float_s32_t max_ref_energy;
@@ -79,6 +93,36 @@ typedef struct {
     int32_t debug_agc_output[4];
 #endif
 } frame_data_t;
+
+/* The beams and blocking signals tile 1 sends with each frame. On tile 0 the
+ * cancellers overwrite `beams` with their cleaned outputs. */
+typedef struct {
+    int32_t beams[CHAIN_BEAMS_COUNT][AP_FRAME_ADVANCE];
+    int32_t blocking[CHAIN_BEAMS_COUNT][AP_FRAME_ADVANCE];
+} chain_xfer_t;
+
+/* Tile 0 to tile 1 on intertile_chain_ctx: the cleaned beams to finish. */
+typedef struct {
+    float scores[CHAIN_BEAMS_COUNT];
+    float_s32_t max_ref_energy;
+    float_s32_t aec_corr_factor;
+    float target_deg;
+    uint8_t target_valid;
+    uint8_t reserved[3];
+    int32_t cleaned[CHAIN_BEAMS_COUNT][AP_FRAME_ADVANCE];   /* last: sent straight from chain_xfer_t */
+} chain_finish_req_t;
+
+/* Tile 1 to tile 0: the picker's mix after the post-filter, and after the gain control. */
+typedef struct {
+    int32_t post[AP_FRAME_ADVANCE];
+    int32_t final[AP_FRAME_ADVANCE];
+    float leader_score;
+    uint8_t leader;
+    uint8_t reserved[3];
+} chain_finish_rep_t;
+
+#define CHAIN_FINISH_REQ_PORT 1
+#define CHAIN_FINISH_REP_PORT 2
 
 typedef struct stage_delay_ctx {
     StreamBufferHandle_t delay_buf;

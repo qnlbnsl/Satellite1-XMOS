@@ -128,13 +128,14 @@ typedef struct
 } heap_stats_t;
 
 /* The fixed_delay pipeline's voice-activity (VNR) estimates, 0..1, after its
- * latest frame. frame_counter 0: no frame has run them yet. */
+ * latest frame, for the canceller on the beam the picker leads with. 0 while the
+ * cancellers are off. frame_counter 0: no frame has finished yet. */
 typedef struct
 {
-    uint32_t frame_counter;  /* frames through the IC stage since boot */
-    float input_vnr;         /* IC input, smoothed: drives the IC's adaption */
-    float output_vnr;        /* IC output, smoothed: drives the AGC (> 0.5 adapts) */
-    float output_vnr_raw;    /* IC output, this frame's inference before smoothing */
+    uint32_t frame_counter;  /* frames finished since boot */
+    float input_vnr;         /* leader canceller's input, smoothed: drives its adaption */
+    float output_vnr;        /* the VNR the gain control reads (> 0.5 adapts); the same estimate */
+    float output_vnr_raw;    /* leader canceller's input, this frame's inference before smoothing */
 } vnr_reading_t;
 
 /* Written by the pipeline on tile 0, read on resource 230 under a critical section. */

@@ -25,6 +25,9 @@ target_link_libraries(fixed_delay_aec_ic_ns_agc_2mic_2ref
         lib_voice::ic
         lib_voice::ns
         lib_voice::vnr
+        fph::chain_beams
+        fph::chain_canceller
+        fph::chain_picker
 )
 
 ## The adec and adec_altarch pipelines below are written against fwk_voice,

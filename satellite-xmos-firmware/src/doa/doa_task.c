@@ -40,6 +40,8 @@ static doa_runtime_t *doa_runtime;
 static volatile int doa_started;
 static uint32_t doa_input_seq;
 static uint32_t doa_drop_count;
+static int doa_target_valid;
+static float doa_target_deg;
 
 void doa_task_push_frame(const int32_t *ref_and_mics, size_t frame_count)
 {
@@ -87,6 +89,8 @@ static void doa_publish(const doa_estimate_t *est)
     int state = rtos_osal_critical_enter();
     doa_runtime->raw = raw;
     doa_runtime->smooth = smooth;
+    doa_target_valid = est->target_valid;
+    doa_target_deg = est->target_deg;
     rtos_osal_critical_exit(state);
 }
 
@@ -158,6 +162,23 @@ void doa_task_start(doa_runtime_t *runtime, unsigned priority)
 
     xTaskCreate(doa_task, "doa", RTOS_THREAD_STACK_SIZE(doa_task), NULL, priority, NULL);
     doa_started = 1;
+}
+
+int doa_task_target(float *deg)
+{
+    int state = rtos_osal_critical_enter();
+    int valid = doa_target_valid;
+    *deg = doa_target_deg;
+    rtos_osal_critical_exit(state);
+    return valid;
+}
+
+#else
+
+int doa_task_target(float *deg)
+{
+    *deg = 0.0f;
+    return 0;
 }
 
 #endif

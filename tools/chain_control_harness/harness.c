@@ -54,3 +54,14 @@ void playback_duck_reset(playback_duck_t *d)
     playback_duck_t init = PLAYBACK_DUCK_INIT;
     *d = init;
 }
+
+/* The whole frame control struct, for a ctypes Structure of the same layout. */
+size_t chain_frame_ctrl_size(void)
+{
+    return sizeof(chain_frame_ctrl_t);
+}
+
+void chain_control_frame_into(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_t *out)
+{
+    chain_control_frame(cc, now_ms, out);
+}

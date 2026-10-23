@@ -72,12 +72,7 @@ static control_ret_t chain_write_cmd(control_resid_t resid, control_cmd_t cmd,
 void chain_control_frame_get(chain_frame_ctrl_t *out)
 {
     if (!chain_ready) {
-        out->tap = CHAIN_TAP_DEFAULT;
-        out->aec_bypass = 0;
-        for (int m = 0; m < CHAIN_MICS; m++) {
-            out->mic_gain[m] = CHAIN_TRIM_UNITY;
-        }
-        out->pointer = 0;
+        chain_control_frame_defaults(out);
         return;
     }
     int lock = rtos_osal_critical_enter();
@@ -144,12 +139,14 @@ void chain_control_servicer(void *args)
 
 void chain_control_frame_get(chain_frame_ctrl_t *out)
 {
-    out->tap = CHAIN_TAP_DEFAULT;
-    out->aec_bypass = 0;
-    out->pointer = 0;
+#if ON_TILE(SPEAKER_PIPELINE_TILE_NO)
+    chain_control_frame_defaults(out);
+#else
+    memset(out, 0, sizeof(*out));      /* the chain controls are read only on the speaker tile */
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = CHAIN_TRIM_UNITY;
     }
+#endif
 }
 
 void chain_control_playback_get(float applied_db, chain_playback_ctrl_t *out)
