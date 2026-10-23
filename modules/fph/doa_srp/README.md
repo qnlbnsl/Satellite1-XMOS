@@ -5,7 +5,7 @@ A C port of the Pi prototype in hermes-os `satellite/prototype/doa`
 board. Same constants, same gates, same hysteresis rules. The ring glide
 (`ring.py`) stays on the host and is not ported.
 
-**Off by default** (CMake `-DSATELLITE1_DOA=ON` turns it on) until the lib_voice swap frees tile 1: with DOA on, tile 1 is 15,396 B over even with the const tables (15,844 B on develop after the integration merge: 540,132 of 524,288).
+**On by default** (CMake `-DSATELLITE1_DOA=OFF` leaves it out). It fits since the lib_voice swap: the debug build's tile 1 is 447,076 of 524,288 B with DOA on, against 414,652 with it off (on develop before the swap, DOA on overflowed tile 1 by 15,844 B).
 
 ## What it computes
 
