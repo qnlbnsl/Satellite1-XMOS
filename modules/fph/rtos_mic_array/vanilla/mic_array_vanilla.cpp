@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <xcore/channel_streaming.h>
 #include <xcore/interrupt.h>
+#include <xcore/assert.h>
 #include <platform.h>
 
 #include "mic_array_vanilla.h"
@@ -86,6 +87,10 @@
 
 ////// Allocate needed objects
 
+// Only the mic tile owns the mic array. Elsewhere the driver is an RPC client,
+// and a global `mics` would still be built by its static constructor.
+#if !defined(MIC_ARRAY_CONFIG_TILE_NO) || ON_TILE(MIC_ARRAY_CONFIG_TILE_NO)
+
 #if (!(MIC_ARRAY_CONFIG_USE_DDR))
 pdm_rx_resources_t pdm_res = PDM_RX_RESOURCES_SDR(
                                 MIC_ARRAY_CONFIG_PORT_MCLK,
@@ -138,3 +143,19 @@ void ma_vanilla_task(
 
   mics.ThreadEntry();
 }
+
+#else
+
+// The driver still references these on other tiles; reaching one is a bug.
+void ma_vanilla_init()
+{
+  xassert(0);
+}
+
+void ma_vanilla_task(
+    chanend_t c_frames_out)
+{
+  xassert(0);
+}
+
+#endif
