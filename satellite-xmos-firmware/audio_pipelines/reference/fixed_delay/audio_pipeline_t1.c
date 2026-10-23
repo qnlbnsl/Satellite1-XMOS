@@ -22,6 +22,7 @@
 #include "audio_pipeline.h"
 #include "audio_pipeline_dsp.h"
 #include "audio_pipeline_control/audio_pipeline_control_settings.h"
+#include "chain_control/chain_control.h"
 
 #if appconfAUDIO_PIPELINE_FRAME_ADVANCE != 240
 #error This pipeline is only configured for 240 frame advance
@@ -331,6 +332,11 @@ static void *audio_pipeline_input_i(void *input_app_data)
 
     frame_data->vnr_pred_flag = 0;
 
+    chain_frame_ctrl_t chain_ctrl;
+    chain_control_frame_get(&chain_ctrl);
+    frame_data->chain_tap = chain_ctrl.tap;
+    frame_data->chain_aec_bypass = chain_ctrl.aec_bypass;
+
     copy_mic_passthrough_to_processing(frame_data);
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     audio_pipeline_tile1_debug.output_after++; /* input wrapper completed */
@@ -444,6 +450,8 @@ static void stage_aec(frame_data_t *frame_data)
     capture_current_frame = fixed_delay_aec_capture_begin_frame(y, x);
 #endif
 
+    /* Bypassed, lib_voice passes the mics through and freezes the filters */
+    aec_state.state.shared_state.config_params.aec_core_conf.bypass = frame_data->chain_aec_bypass;
     aec_process_frame(
             &aec_state.state,
             stage1_output,

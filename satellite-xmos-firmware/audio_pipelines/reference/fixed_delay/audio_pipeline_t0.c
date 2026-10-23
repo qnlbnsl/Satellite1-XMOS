@@ -28,6 +28,7 @@
 #include "audio_pipeline.h"
 #include "audio_pipeline_dsp.h"
 #include "audio_pipeline_control/audio_pipeline_control_settings.h"
+#include "chain_control/chain_contract.h"
 
 #if appconfAUDIO_PIPELINE_FRAME_ADVANCE != 240
 #error This pipeline is only configured for 240 frame advance
@@ -101,9 +102,34 @@ static void *audio_pipeline_input_i(void *input_app_data)
     return frame_data;
 }
 
+/* Output channel 0 carries the chain's mono signal after the selected tap's
+ * module; the stages after it still run, so the chain does not change. */
+static void apply_chain_tap(frame_data_t *frame_data)
+{
+    const int32_t *src;
+
+    switch (frame_data->chain_tap) {
+    case CHAIN_TAP_MIC0:
+        src = frame_data->mic_samples_passthrough[0];
+        break;
+    case CHAIN_TAP_AEC:
+    case CHAIN_TAP_BEAMS:       /* no beams on the chip: mic 0 after the AEC */
+        src = frame_data->aec_output[0];
+        break;
+    case CHAIN_TAP_CANCELLER:
+    case CHAIN_TAP_POST:
+        src = frame_data->chain_tap_samples;
+        break;
+    default:                    /* CHAIN_TAP_FINAL: the AGC output, as before */
+        return;
+    }
+    memcpy(frame_data->samples[0], src, appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
+}
+
 static int audio_pipeline_output_i(frame_data_t *frame_data,
                                    void *output_app_data)
 {
+    apply_chain_tap(frame_data);
 
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     audio_pipeline_tile0_debug.output_enter++;
@@ -183,6 +209,9 @@ static void stage_vnr_and_ic(frame_data_t *frame_data)
 
     /* Intentionally ignoring comms ch from here on out */
     memcpy(frame_data->samples[0], ic_output, appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
+    if (frame_data->chain_tap == CHAIN_TAP_CANCELLER) {
+        memcpy(frame_data->chain_tap_samples, ic_output, sizeof(frame_data->chain_tap_samples));
+    }
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     snapshot_frame_samples(frame_data->debug_ic_output, ic_output);
 #endif
@@ -205,6 +234,9 @@ static void stage_ns(frame_data_t *frame_data)
                 ns_output,
                 frame_data->samples[0]);
     memcpy(frame_data->samples[0], ns_output, appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
+    if (frame_data->chain_tap == CHAIN_TAP_POST) {
+        memcpy(frame_data->chain_tap_samples, ns_output, sizeof(frame_data->chain_tap_samples));
+    }
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     snapshot_frame_samples(frame_data->debug_ns_output, ns_output);
 #endif

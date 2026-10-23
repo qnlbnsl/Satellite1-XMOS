@@ -56,7 +56,12 @@ typedef struct {
     int32_t mic_samples_passthrough[appconfMIC_PIPELINE_INPUT_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     int32_t aec_output[appconfMIC_PIPELINE_AEC_OUT_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
 
+    /* Not an output channel: the chain tap's signal when tile 0 takes it */
+    int32_t chain_tap_samples[appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+
     /* Below is additional context needed by other stages on a per frame basis */
+    uint8_t chain_tap;          /* CHAIN_TAP_*: what output channel 0 carries */
+    uint8_t chain_aec_bypass;   /* both read from the chain control resource on tile 1 */
     int32_t vnr_pred_flag;
     float_s32_t output_vnr_pred;
     float_s32_t max_ref_energy;
