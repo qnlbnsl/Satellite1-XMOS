@@ -165,6 +165,27 @@ static uint8_t check_scalar(const chain_setting_spec_t *s, uint32_t bits)
     }
 }
 
+/* 10^(db/20) for |db| <= 12, without libm: exp(db * ln(10) / 160) from its
+ * Taylor series to the 6th power, squared three times. One float operation per
+ * statement, so no compiler fuses them; satellite's chain/chip_trim.py repeats
+ * the same sequence. */
+static float trim_db_to_gain(float db)
+{
+    static const float c[7] = {
+        1.0f / 720.0f, 1.0f / 120.0f, 1.0f / 24.0f, 1.0f / 6.0f, 0.5f, 1.0f, 1.0f,
+    };
+    float x = db * 0x1.d791c6p-7f;      /* ln(10) / 160 */
+    float p = c[0];
+    for (int k = 1; k < 7; k++) {
+        p = p * x;
+        p = p + c[k];
+    }
+    for (int k = 0; k < 3; k++) {
+        p = p * p;
+    }
+    return p;
+}
+
 /* Each mic's trim gain: the float mean of its band trims in dB, as Q4.28. */
 static void trim_update(chain_control_t *cc)
 {
@@ -185,8 +206,7 @@ static void trim_update(chain_control_t *cc)
             sum += b[m * bands + k];
         }
         float db = sum / (float)bands;
-        float lin = powf(10.0f, db / 20.0f);
-        cc->trim_gain[m] = (int32_t)lroundf(lin * (float)CHAIN_TRIM_UNITY);
+        cc->trim_gain[m] = (int32_t)lroundf(trim_db_to_gain(db) * (float)CHAIN_TRIM_UNITY);
     }
 }
 
