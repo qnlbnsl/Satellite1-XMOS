@@ -19,10 +19,12 @@
 /* Modules this firmware runs in its audio path. `applied` is 1 only when every
  * one of the module's settings takes effect. Trim applies one broadband gain per
  * mic and plays no chime; the echo canceller honours on and bypass, while its
- * tail and step size are fixed by the build. */
+ * tail and step size are fixed by the build. Playback is the speaker path's
+ * duck (playback_duck.c), every setting live. */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_TRIM, 0 },
     { CHAIN_MODULE_AEC, 0 },
+    { CHAIN_MODULE_PLAYBACK, 1 },
 };
 
 #define TAP_REVERT_MS ((uint32_t)CHAIN_TAP_REVERT_S * 1000u)
@@ -407,6 +409,16 @@ uint8_t chain_control_write(chain_control_t *cc, uint8_t cmd,
     case CHAIN_CMD_SELECT:
         err = do_select(cc, payload, len, &bad_setting);
         break;
+    case CHAIN_CMD_DUCK:
+        if (len != 1) {
+            err = CHAIN_ERR_LENGTH;
+        } else if (payload[0] > 1) {
+            err = CHAIN_ERR_CHOICE;
+        } else {
+            cc->duck.engaged = payload[0];
+            cc->duck.since_ms = now_ms;
+        }
+        break;
     default:
         err = CHAIN_ERR_COMMAND;
         break;
@@ -437,6 +449,32 @@ static void revert_tap(chain_control_t *cc, uint32_t now_ms)
 {
     if (cc->tap != CHAIN_TAP_DEFAULT && now_ms - cc->tap_since_ms >= TAP_REVERT_MS) {
         cc->tap = CHAIN_TAP_DEFAULT;
+    }
+}
+
+/* One playback setting's wire bits, by setting id. */
+static uint32_t playback_value(const chain_control_t *cc, uint8_t setting)
+{
+    int mi = module_index(CHAIN_MODULE_PLAYBACK);
+    return cc->modules[mi].values[setting_index(&chain_modules[mi], setting)];
+}
+
+static uint32_t duck_max_ms(const chain_control_t *cc)
+{
+    float s = bits_float(playback_value(cc, CHAIN_SETTING_PLAYBACK_DUCK_MAX_S));
+    return (uint32_t)(s * 1000.0f + 0.5f);
+}
+
+static uint16_t duck_left_ms(const chain_control_t *cc, uint32_t now_ms)
+{
+    uint32_t elapsed = now_ms - cc->duck.since_ms, max = duck_max_ms(cc);
+    return !cc->duck.engaged || elapsed >= max ? 0 : (uint16_t)(max - elapsed);
+}
+
+static void expire_duck(chain_control_t *cc, uint32_t now_ms)
+{
+    if (cc->duck.engaged && now_ms - cc->duck.since_ms >= duck_max_ms(cc)) {
+        cc->duck.engaged = 0;
     }
 }
 
@@ -570,6 +608,13 @@ uint8_t chain_control_read(chain_control_t *cc, uint8_t cmd,
         wr16(&r[4], cc->last_error.refusals);
         size = 6;
         break;
+    case CHAIN_CMD_DUCK:
+        expire_duck(cc, now_ms);
+        r[0] = cc->duck.engaged;
+        wr16(&r[1], duck_left_ms(cc, now_ms));
+        wr16(&r[3], (uint16_t)cc->duck.applied_cdb);
+        size = 5;
+        break;
     default:
         err = CHAIN_ERR_COMMAND;
         break;
@@ -594,6 +639,19 @@ void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = trim_on ? cc->trim_gain[m] : CHAIN_TRIM_UNITY;
     }
+}
+
+void chain_control_playback(chain_control_t *cc, uint32_t now_ms, float applied_db,
+                            chain_playback_ctrl_t *out)
+{
+    int mi = module_index(CHAIN_MODULE_PLAYBACK);
+    float cdb = applied_db * 100.0f;
+
+    cc->duck.applied_cdb = (int16_t)(cdb <= -32768.0f ? -32768 : cdb >= 32767.0f ? 32767 : lrintf(cdb));
+    expire_duck(cc, now_ms);
+    out->target_db = cc->duck.engaged && cc->modules[mi].on ?
+        -bits_float(playback_value(cc, CHAIN_SETTING_PLAYBACK_DUCK_DB)) : 0.0f;
+    out->ramp_ms = (uint16_t)playback_value(cc, CHAIN_SETTING_PLAYBACK_RAMP_MS);
 }
 
 #endif /* CHAIN_CONTROL_HERE */

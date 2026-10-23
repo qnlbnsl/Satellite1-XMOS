@@ -1,5 +1,5 @@
 {"beams":4,"bootstrap":{"bypass_all":3,"state":1,"tap":2},"hop":240,"kind":"frame","mics":4,"rate":16000,"version":1}
-{"chunk":240,"commands":{"blob_read":8,"blob_write":5,"bypass_all":3,"last_error":9,"module":7,"select":6,"set":4,"state":1,"tap":2},"errors":[65,66,96,97,98,99,100,101,102,103,104],"kind":"wire","layout":1,"on":0,"resource":233,"tap_revert_s":600,"types":{"blob":4,"enum":3,"float":2,"int":1},"variant":128}
+{"chunk":240,"commands":{"blob_read":8,"blob_write":5,"bypass_all":3,"duck":10,"last_error":9,"module":7,"select":6,"set":4,"state":1,"tap":2},"errors":[65,66,96,97,98,99,100,101,102,103,104],"kind":"wire","layout":1,"on":0,"resource":233,"tap_revert_s":600,"types":{"blob":4,"enum":3,"float":2,"int":1},"variant":128}
 {"default":6,"kind":"taps","taps":[[1,0],[2,2],[3,4],[4,5],[5,7],[6,9]]}
 {"id":1,"on":true,"settings":[[1,"enum","",null,null,null,0,[[0,"off"],[1,"on"]],[]],[2,"float","dB",-40.0,0.0,null,-20.0,[],[]],[3,"float","dB",1.0,20.0,null,6.0,[],[]],[4,"blob","dB",-12.0,12.0,null,0.0,[],[4,16]]],"variants":[]}
 {"id":2,"on":true,"settings":[[1,"int","ms",60,300,15,150,[],[]],[2,"float","",0.01,1.0,null,0.5,[],[]]],"variants":[]}
@@ -10,3 +10,4 @@
 {"id":7,"on":false,"settings":[[1,"float","dB",-30.0,0.0,null,-12.0,[],[]]],"variants":[[1,"wiener"],[2,"xmos"]]}
 {"id":8,"on":false,"settings":[[1,"float","dBFS",-40.0,-3.0,null,-20.0,[],[]],[2,"float","dB",0.0,60.0,null,30.0,[],[]],[3,"enum","",null,null,null,1,[[0,"always"],[1,"voice"]],[]]],"variants":[]}
 {"id":9,"on":true,"settings":[[1,"float","",0.0,1.0,null,0.5,[],[]]],"variants":[]}
+{"id":32,"on":true,"settings":[[1,"float","dB",0.0,40.0,null,25.0,[],[]],[2,"int","ms",0,500,null,50,[],[]],[3,"float","s",1.0,60.0,null,15.0,[],[]]],"variants":[]}

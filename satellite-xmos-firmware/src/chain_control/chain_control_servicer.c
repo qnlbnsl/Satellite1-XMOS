@@ -84,6 +84,18 @@ void chain_control_frame_get(chain_frame_ctrl_t *out)
     rtos_osal_critical_exit(lock);
 }
 
+void chain_control_playback_get(float applied_db, chain_playback_ctrl_t *out)
+{
+    if (!chain_ready) {
+        out->target_db = 0.0f;
+        out->ramp_ms = 0;
+        return;
+    }
+    int lock = rtos_osal_critical_enter();
+    chain_control_playback(&chain_cc, now_ms(), applied_db, out);
+    rtos_osal_critical_exit(lock);
+}
+
 void chain_control_servicer_init(servicer_t *servicer)
 {
     static const uint8_t firmware[5] = {
@@ -136,6 +148,13 @@ void chain_control_frame_get(chain_frame_ctrl_t *out)
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = CHAIN_TRIM_UNITY;
     }
+}
+
+void chain_control_playback_get(float applied_db, chain_playback_ctrl_t *out)
+{
+    (void) applied_db;
+    out->target_db = 0.0f;
+    out->ramp_ms = 0;
 }
 
 #endif

@@ -29,6 +29,7 @@
 #include "audio_runtime/audio_runtime_gain.h"
 #include "audio_pipeline_control/audio_pipeline_control_servicer.h"
 #include "chain_control/chain_control_servicer.h"
+#include "chain_control/playback_duck.h"
 #include "dfu_servicer.h"
 #include "gpio/gpio_servicer.h"
 #include "led_ring/led_ring_servicer.h"
@@ -363,7 +364,23 @@ int speaker_pipeline_output(void *output_app_data,
             tmp[(frame * 3) + 2][0][1] = tmp[frame * 3][0][1];
         }
     }
-    
+
+    /* The duck scales tmp in place: the DAC and the reference below both take
+     * these samples, so the echo canceller sees exactly what is played. */
+    {
+        static playback_duck_t duck = PLAYBACK_DUCK_INIT;
+        static float duck_db;
+        chain_playback_ctrl_t playback;
+
+        chain_control_playback_get(duck_db, &playback);
+        duck_db = playback_duck_apply(&duck,
+                                      playback.target_db,
+                                      (uint32_t)playback.ramp_ms * (appconfI2S_AUDIO_SAMPLE_RATE / 1000),
+                                      (int32_t *) tmp,
+                                      frame_count,
+                                      appconfAUDIO_SPK_CHANNELS);
+    }
+
     // send to DAC
     rtos_i2s_tx_1(i2s_ctx,
                 (int32_t*) tmp,

@@ -32,6 +32,7 @@ typedef struct {
     uint32_t nonce;
     uint8_t firmware[5];
     int32_t trim_gain[CHAIN_MICS];        /* each mic's gain from the accepted trims, Q4.28 */
+    struct { uint8_t engaged; uint32_t since_ms; int16_t applied_cdb; } duck;
 } chain_control_t;
 
 /* What the audio path applies to one frame. */
@@ -40,6 +41,12 @@ typedef struct {
     uint8_t aec_bypass;     /* 1: the echo canceller passes the mics through */
     int32_t mic_gain[CHAIN_MICS];  /* trim per mic, Q4.28; CHAIN_TRIM_UNITY when trim is off */
 } chain_frame_ctrl_t;
+
+/* What the speaker path applies to one frame. */
+typedef struct {
+    float target_db;        /* -duck_db while ducked and playback is on, else 0 */
+    uint16_t ramp_ms;       /* how long a move to a new target takes */
+} chain_playback_ctrl_t;
 
 /* Every module at its contract defaults, the default tap, no bypass_all. */
 void chain_control_init(chain_control_t *cc, const uint8_t firmware[5], uint32_t nonce);
@@ -62,9 +69,19 @@ void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_
  * of its band trims in dB (chain_control.c). */
 void chain_trim_frame(int32_t *out, const int32_t *in, const int32_t gain[CHAIN_MICS]);
 
+/* Records `applied_db`, the gain the speaker path's last frame ended at, for
+ * CHAIN_CMD_DUCK reads, and returns the controls for its next frame. Releases
+ * a duck not renewed for duck_max_s. */
+void chain_control_playback(chain_control_t *cc, uint32_t now_ms, float applied_db,
+                            chain_playback_ctrl_t *out);
+
 /* zlib's crc32 of data[0..len). */
 uint32_t chain_crc32(const uint8_t *data, size_t len);
 
 /* The served controls for the next frame (chain_control_servicer.c). Safe from
  * any task on the speaker-pipeline tile. */
 void chain_control_frame_get(chain_frame_ctrl_t *out);
+
+/* chain_control_playback on the served controls; no duck while the resource
+ * is not served. Safe from any task on the speaker-pipeline tile. */
+void chain_control_playback_get(float applied_db, chain_playback_ctrl_t *out);

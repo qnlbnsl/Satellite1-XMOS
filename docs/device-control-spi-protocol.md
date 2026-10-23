@@ -456,6 +456,7 @@ are little-endian.
 | `MODULE` | `7` | Read | `[size, module, on, variant, count, (setting, value 4) x count]` |
 | `BLOB_READ` | `8` | Read | `[module, setting, offset u16, total u16, crc32 u32, len, data]` |
 | `LAST_ERROR` | `9` | Read | `[status, command, module, setting, refusals u16]` |
+| `DUCK` | `10` | Write / Read | Write `[1]` engage or renew, `[0]` release. Read `[engaged, left_ms u16, gain_cdb i16]` |
 
 - Ids `1`-`3` are the contract's frozen bootstrap commands.
 - A value is 4 bytes: `int32` for an int, the choice number for an enum,
@@ -465,17 +466,19 @@ are little-endian.
   commits it if the crc32 (zlib) of the whole blob matches and every value is in
   bounds. In `MODULE`, a blob's value is the crc32 of its contents.
 - `STATE` flags per module: `1` runs in this firmware's audio path, `2` on, `4`
-  every setting takes effect. This build runs two modules, both with flag `4`
-  clear:
-  - the microphone trim (`trim`), on the four raw mics before the echo
-    canceller. Each mic gets one broadband gain, the mean of its 16 band trims
-    in dB (Q4.28, rounded half up, saturated to int32, then the pipeline's input
-    clamp). The band shape and the chime settings take no effect on the chip.
-    `on` = 0 or `BYPASS_ALL` makes every gain 0 dB. The trims start at 0 dB at
-    boot and change only when a whole `trims` blob is committed. The raw mic
-    lanes stay untrimmed; the AEC lanes, and taps `2` and `3`, are trimmed;
-  - the echo canceller (`aec`): `on` and `BYPASS_ALL` bypass it through
-    lib_voice's own bypass; its tail and step size are the build's.
+  every setting takes effect. This build runs three modules:
+  - the microphone trim (`trim`), flag `4` clear, on the four raw mics before
+    the echo canceller. Each mic gets one broadband gain, the mean of its 16
+    band trims in dB (Q4.28, rounded half up, saturated to int32, then the
+    pipeline's input clamp). The band shape and the chime settings take no effect
+    on the chip. `on` = 0 or `BYPASS_ALL` makes every gain 0 dB. The trims start
+    at 0 dB at boot and change only when a whole `trims` blob is committed. The
+    raw mic lanes stay untrimmed; the AEC lanes, and taps `2` and `3`, are
+    trimmed;
+  - the echo canceller (`aec`), flag `4` clear: `on` and `BYPASS_ALL` bypass it
+    through lib_voice's own bypass; its tail and step size are the build's;
+  - `playback` (module `32`, after the chain's modules in `STATE`), the speaker
+    path's duck, flag `4` set.
 - The fingerprint is the first 8 bytes of the sha256 of `chain_contract.jsonl`,
   the module hash the first 8 bytes of the sha256 of that module's line. The
   nonce is drawn from the reference timer at the first command after boot.
@@ -483,6 +486,39 @@ are little-endian.
   the AEC, `3` after beams (no beams on the chip: as `2`), `4` after the IC,
   `5` after the NS, `6` final (the AGC output, the default). A tap other than
   `6` reverts to `6` after 600 s and at boot. The stages after the tap still run.
+
+#### Ducking
+
+`DUCK` turns the Pi's playback down on the chip, for the wake word. The gain is
+applied in `speaker_pipeline_output` (`src/main.c`) to the samples bound for
+the DAC, after any packaged-reference remapping and before the DAC copy and the
+echo canceller's reference are both taken from them, so the reference always
+equals what is played. The DAC volume is never used for ducking. Its settings
+are module `32`'s, set with `SET`: `duck_db` (1, float, 0-40, default 25),
+`ramp_ms` (2, int, 0-500, default 50) and `duck_max_s` (3, float, 1-60,
+default 15).
+
+- `DUCK [1]` engages the duck, or renews it if engaged: the gain ramps to
+  `-duck_db`, and the `duck_max_s` timer restarts. Repeats do not stack.
+- `DUCK [0]` releases it: the gain ramps back to 0 dB.
+- A duck not renewed for `duck_max_s` releases by itself, so playback never
+  stays quiet after the host stops talking to the chip. The timer runs on the
+  1 kHz tick and survives its 32-bit wrap. A reboot also releases it.
+- With module `32` off, an engaged duck holds the gain at 0 dB; `BYPASS_ALL`
+  does not touch it.
+- A wrong length is refused `66`, a byte other than `0` or `1` `100`.
+- The read's `left_ms` is the time before it releases by itself (`0` when not
+  engaged); `gain_cdb` is the gain the speaker path's last 15 ms frame ended
+  at, in hundredths of a dB, updated whether or not anything is playing.
+
+The ramp moves from wherever the gain is to the new target in `ramp_ms` (`0`
+steps at the next frame). It is linear in dB over time, sampled at every 15 ms
+speaker frame boundary (720 samples at 48 kHz) and at the ramp's end, and
+linear in amplitude per sample between those points, the same gain on both
+channels of a frame. The ramp starts on the first speaker frame after the
+write. A default 25 dB, 50 ms duck therefore falls 7.5 dB per 15 ms frame and
+reaches -25 dB 2400 samples into its ramp, 240 samples into its fourth frame.
+At 0 dB the samples pass through bit-exact.
 
 A refused write is recorded for `LAST_ERROR` with one of these statuses. The
 status frame the host clocks after a write carries only the transport's result

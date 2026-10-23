@@ -3,12 +3,12 @@
  * with chain_contract.jsonl beside it. Do not edit: chain_contract_check.cmake fails the build
  * when this file was changed by hand or no longer matches the projection. */
 #pragma once
-#define CHAIN_CONTRACT_HEADER_SHA256 "83e5b2f07cdb6fbd2cd8d6a1e18283f6f9282af6dd48a87f08898c2dacac5a04"
+#define CHAIN_CONTRACT_HEADER_SHA256 "94ab4723c9c4be8035f017231f422596d7e3db5d0c514cb3c37ef3fa87da829f"
 
 #include <stdint.h>
 
 #define CHAIN_CONTRACT_VERSION 1
-#define CHAIN_CONTRACT_FINGERPRINT 0xbd3de7ab089f59f4ULL
+#define CHAIN_CONTRACT_FINGERPRINT 0x1e9e29ac5fa9278aULL
 #define CHAIN_RATE 16000
 #define CHAIN_HOP 240
 #define CHAIN_MICS 4
@@ -35,6 +35,7 @@
 #define CHAIN_CMD_MODULE 7
 #define CHAIN_CMD_BLOB_READ 8
 #define CHAIN_CMD_LAST_ERROR 9
+#define CHAIN_CMD_DUCK 10
 #define CHAIN_ERR_COMMAND 65
 #define CHAIN_ERR_LENGTH 66
 #define CHAIN_ERR_MODULE 96
@@ -61,7 +62,7 @@
 #define CHAIN_TAP_DEFAULT CHAIN_TAP_FINAL
 #define CHAIN_TAP_COUNT 6
 
-/* Modules, in signal order */
+/* Modules: the chain's in signal order, then playback */
 #define CHAIN_MODULE_TRIM 1
 #define CHAIN_MODULE_AEC 2
 #define CHAIN_MODULE_DOA 3
@@ -71,7 +72,8 @@
 #define CHAIN_MODULE_POST 7
 #define CHAIN_MODULE_GAIN 8
 #define CHAIN_MODULE_ACTIVITY 9
-#define CHAIN_MODULE_COUNT 9
+#define CHAIN_MODULE_PLAYBACK 32
+#define CHAIN_MODULE_COUNT 10
 
 /* Module hashes: sha256 of each module's line in the projection, first 8 bytes */
 #define CHAIN_HASH_1 0xf5714c8b89377b70ULL
@@ -83,6 +85,7 @@
 #define CHAIN_HASH_7 0xe5bfba13f56afef5ULL
 #define CHAIN_HASH_8 0xc21a120b65e562e7ULL
 #define CHAIN_HASH_9 0x7c6f45b17c9cb6b8ULL
+#define CHAIN_HASH_32 0x180a7e51bc9c63e6ULL
 
 /* Settings */
 #define CHAIN_SETTING_TRIM_CHIME 1
@@ -105,6 +108,9 @@
 #define CHAIN_SETTING_GAIN_MAX_GAIN_DB 2
 #define CHAIN_SETTING_GAIN_ADAPT_ON 3
 #define CHAIN_SETTING_ACTIVITY_THRESHOLD 1
+#define CHAIN_SETTING_PLAYBACK_DUCK_DB 1
+#define CHAIN_SETTING_PLAYBACK_RAMP_MS 2
+#define CHAIN_SETTING_PLAYBACK_DUCK_MAX_S 3
 #define CHAIN_SETTINGS_MAX 4
 #define CHAIN_BLOB_FLOATS 64
 #define CHAIN_BLOB_BYTES_MAX 256
@@ -177,6 +183,11 @@ static const chain_setting_spec_t chain_gain_settings[] = {
 static const chain_setting_spec_t chain_activity_settings[] = {
     { 1, CHAIN_TYPE_FLOAT, 0, 0x0.0p+0f /* 0.0 */, 0x1.0000000000000p+0f /* 1.0 */, 0.0f, 0x3f000000u /* 0.5 */, 0, 0 },
 };
+static const chain_setting_spec_t chain_playback_settings[] = {
+    { 1, CHAIN_TYPE_FLOAT, 0, 0x0.0p+0f /* 0.0 */, 0x1.4000000000000p+5f /* 40.0 */, 0.0f, 0x41c80000u /* 25.0 */, 0, 0 },
+    { 2, CHAIN_TYPE_INT, 0, 0x0.0p+0f /* 0 */, 0x1.f400000000000p+8f /* 500 */, 0.0f, 0x00000032u /* 50 */, 0, 0 },
+    { 3, CHAIN_TYPE_FLOAT, 0, 0x1.0000000000000p+0f /* 1.0 */, 0x1.e000000000000p+5f /* 60.0 */, 0.0f, 0x41700000u /* 15.0 */, 0, 0 },
+};
 static const chain_module_spec_t chain_modules[CHAIN_MODULE_COUNT] = {
     { CHAIN_MODULE_TRIM, 1, CHAIN_HASH_1, 0, 0, chain_trim_settings, 4 },
     { CHAIN_MODULE_AEC, 1, CHAIN_HASH_2, 0, 0, chain_aec_settings, 2 },
@@ -187,5 +198,6 @@ static const chain_module_spec_t chain_modules[CHAIN_MODULE_COUNT] = {
     { CHAIN_MODULE_POST, 0, CHAIN_HASH_7, chain_post_variants, 2, chain_post_settings, 1 },
     { CHAIN_MODULE_GAIN, 0, CHAIN_HASH_8, 0, 0, chain_gain_settings, 3 },
     { CHAIN_MODULE_ACTIVITY, 1, CHAIN_HASH_9, 0, 0, chain_activity_settings, 1 },
+    { CHAIN_MODULE_PLAYBACK, 1, CHAIN_HASH_32, 0, 0, chain_playback_settings, 3 },
 };
 #endif /* CHAIN_CONTRACT_TABLES */
