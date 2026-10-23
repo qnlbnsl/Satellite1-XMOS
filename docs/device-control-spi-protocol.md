@@ -476,7 +476,11 @@ are little-endian.
   `5` after the NS, `6` final (the AGC output, the default). A tap other than
   `6` reverts to `6` after 600 s and at boot. The stages after the tap still run.
 
-A refused write returns one of these statuses and is recorded for `LAST_ERROR`:
+A refused write is recorded for `LAST_ERROR` with one of these statuses. The
+status frame the host clocks after a write carries only the transport's result
+(`0` even for a refused write; checked on a Satellite1 against resource 230 as
+well), so a host reads `LAST_ERROR` after each write and treats a rising
+`refusals` count as the refusal:
 `65` unknown command, `66` wrong length, `96` unknown module, `97` unknown
 setting, `98` out of range or not finite, `99` not a multiple of the step,
 `100` not one of the choices, `101` unknown tap, `102` blob chunk out of
