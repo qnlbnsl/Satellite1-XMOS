@@ -11,8 +11,8 @@
 #include <stdint.h>
 
 /* Pipeline config */
-#define AP_MAX_Y_CHANNELS (2)
-#define AP_MAX_X_CHANNELS (2)
+#define AP_MAX_Y_CHANNELS (4)
+#define AP_MAX_X_CHANNELS (1)
 #define AP_FRAME_ADVANCE (240)
 
 /* AEC config: AEC_MAX_Y/X_CHANNELS and the filter phases come from the
@@ -33,6 +33,15 @@
 
 _Static_assert(AEC_MAX_Y_CHANNELS == AP_MAX_Y_CHANNELS && AEC_MAX_X_CHANNELS == AP_MAX_X_CHANNELS,
                "SATELLITE1_AEC_SCHEDULE (firmware.cmake) must match AP_MAX_Y_CHANNELS / AP_MAX_X_CHANNELS");
+_Static_assert(AP_MAX_Y_CHANNELS == appconfMIC_PIPELINE_INPUT_CHANNELS &&
+               AP_MAX_Y_CHANNELS == appconfMIC_PIPELINE_AEC_OUT_CHANNELS,
+               "the AEC cancels every mic");
+
+/* stage_delay moves `samples` and the reference by the AEC channel counts,
+ * which no longer match them: the AEC reads all four mics and one mono mix. */
+#if appconfINPUT_SAMPLES_MIC_DELAY_MS != 0 && !appconfAUDIO_PIPELINE_SKIP_STATIC_DELAY
+#error "the static mic/reference delay is not supported with the 4-mic, mono-reference AEC"
+#endif
 
 /* The AEC schedule lib_voice generates from SATELLITE1_AEC_SCHEDULE */
 extern aec_task_distribution_t tdist;
@@ -45,6 +54,7 @@ typedef struct {
     int32_t samples[appconfMIC_PIPELINE_PROC_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     int32_t aec_reference_audio_samples[appconfMIC_PIPELINE_REF_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     int32_t mic_samples_passthrough[appconfMIC_PIPELINE_INPUT_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t aec_output[appconfMIC_PIPELINE_AEC_OUT_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
 
     /* Below is additional context needed by other stages on a per frame basis */
     int32_t vnr_pred_flag;

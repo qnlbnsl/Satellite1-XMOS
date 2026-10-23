@@ -26,6 +26,8 @@
 #define appconfMIC_PIPELINE_INPUT_CHANNELS      MIC_ARRAY_CONFIG_MIC_COUNT
 #define appconfMIC_PIPELINE_PROC_CHANNELS       2
 #define appconfMIC_PIPELINE_OUT_CHANNELS        2
+/* Echo-cancelled mics, after the raw mics in the output channel order */
+#define appconfMIC_PIPELINE_AEC_OUT_CHANNELS    MIC_ARRAY_CONFIG_MIC_COUNT
 
 /* Compatibility for legacy/non-Satellite1 pipeline variants during integration. */
 #define appconfAUDIO_PIPELINE_CHANNELS          appconfMIC_PIPELINE_INPUT_CHANNELS

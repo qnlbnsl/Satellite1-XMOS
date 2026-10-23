@@ -141,7 +141,8 @@ static int audio_pipeline_output_i(frame_data_t *frame_data,
 #endif
     int ret = audio_pipeline_output(output_app_data,
                                     (int32_t *) frame_data->samples,
-                                    appconfMIC_PIPELINE_PROC_CHANNELS + appconfMIC_PIPELINE_REF_CHANNELS + appconfMIC_PIPELINE_INPUT_CHANNELS,
+                                    appconfMIC_PIPELINE_PROC_CHANNELS + appconfMIC_PIPELINE_REF_CHANNELS +
+                                    appconfMIC_PIPELINE_INPUT_CHANNELS + appconfMIC_PIPELINE_AEC_OUT_CHANNELS,
                                     appconfAUDIO_PIPELINE_FRAME_ADVANCE);
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     audio_pipeline_tile0_debug.output_after++;

@@ -80,7 +80,8 @@ endif()
 # shadow_phases": lib_voice generates aec_conf.h and the `tdist` schedule from
 # it (lib_voice/aec_schedule.cmake). audio_pipeline_t1.c initialises the AEC
 # with these same values.
-set(SATELLITE1_AEC_SCHEDULE "1 2 2 10 5")
+# Four mics against one reference, the mono mix of the two speaker channels.
+set(SATELLITE1_AEC_SCHEDULE "1 4 1 10 5")
 
 #**********************
 # XMOS Firmware Targets

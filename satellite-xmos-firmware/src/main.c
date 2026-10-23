@@ -212,7 +212,8 @@ static int32_t get_mic_output_sample(const int32_t *samples,
 
     xassert(channel_index < appconfMIC_PIPELINE_PROC_CHANNELS +
                             appconfMIC_PIPELINE_REF_CHANNELS +
-                            appconfMIC_PIPELINE_INPUT_CHANNELS);
+                            appconfMIC_PIPELINE_INPUT_CHANNELS +
+                            appconfMIC_PIPELINE_AEC_OUT_CHANNELS);
     return *(samples + frame_index + (channel_index * frame_count));
 }
 #endif
@@ -700,6 +701,9 @@ int audio_pipeline_output(void *output_app_data,
      // 3 : ref 1, overwritten by AEC+IC+NS output
      // 4 : mic 0
      // 5 : mic 1
+     // 6 : mic 2
+     // 7 : mic 3
+     // 8-11 : mics 0-3 with AEC applied
 
       if (appconfI2S_AUDIO_SAMPLE_RATE == 3*appconfAUDIO_PIPELINE_SAMPLE_RATE) {
         // duplicate to 48kHz

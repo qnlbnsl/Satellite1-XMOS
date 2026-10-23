@@ -55,11 +55,16 @@ static int32_t DWORD_ALIGNED fixed_delay_aec_capture_samples
     [AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_FRAMES]
     [AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_CHANNELS]
     [AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_SAMPLES_PER_FRAME];
+/* The capture keeps mics 0-1 and the reference, as the probe and the chunks
+ * carry them; the AEC itself runs on more mics and one reference. */
+#define CAPTURE_MIC_CHANNELS AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_CHANNELS
+#define CAPTURE_REF_CHANNELS AEC_MAX_X_CHANNELS
+_Static_assert(CAPTURE_MIC_CHANNELS <= AEC_MAX_Y_CHANNELS, "capture mics are a prefix of the AEC's");
 static int32_t fixed_delay_aec_capture_mic_prefix
-    [AEC_MAX_Y_CHANNELS]
+    [2]
     [AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_PREFIX_SAMPLES];
 static int32_t fixed_delay_aec_capture_ref_prefix
-    [AEC_MAX_X_CHANNELS]
+    [2]
     [AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_PREFIX_SAMPLES];
 static uint16_t fixed_delay_aec_capture_prefix_frame_index;
 static uint16_t fixed_delay_aec_capture_prefix_sample_index;
@@ -223,12 +228,12 @@ static int fixed_delay_aec_capture_begin_frame(
         }
     }
     if (!fixed_delay_aec_capture_prefix_has_nonzero && prefix_segment_found) {
-        for (size_t ch = 0; ch < AEC_MAX_Y_CHANNELS; ch++) {
+        for (size_t ch = 0; ch < CAPTURE_MIC_CHANNELS; ch++) {
             memcpy(fixed_delay_aec_capture_mic_prefix[ch],
                    &mic_input[ch][prefix_sample_index],
                    sizeof(fixed_delay_aec_capture_mic_prefix[ch]));
         }
-        for (size_t ch = 0; ch < AEC_MAX_X_CHANNELS; ch++) {
+        for (size_t ch = 0; ch < CAPTURE_REF_CHANNELS; ch++) {
             memcpy(fixed_delay_aec_capture_ref_prefix[ch],
                    &ref_input[ch][prefix_sample_index],
                    sizeof(fixed_delay_aec_capture_ref_prefix[ch]));
@@ -252,7 +257,7 @@ static void fixed_delay_aec_capture_store_output(
 
     uint16_t frame = fixed_delay_aec_capture_status.frames_captured;
     if (frame < AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_FRAMES) {
-        for (size_t ch = 0; ch < AEC_MAX_Y_CHANNELS; ch++) {
+        for (size_t ch = 0; ch < CAPTURE_MIC_CHANNELS; ch++) {
             memcpy(fixed_delay_aec_capture_samples[frame][ch],
                    stage1_output[ch],
                    AUDIO_PIPELINE_FIXED_DELAY_AEC_CAPTURE_SAMPLES_PER_FRAME *
@@ -401,11 +406,30 @@ static void stage_delay(frame_data_t *frame_data)
 #endif /* appconfAUDIO_PIPELINE_SKIP_DELAY */
 }
 
+/* The speaker amplifier plays (L+R)/2, so the AEC's one reference is that mix. */
+static void mix_reference_to_mono(
+    int32_t x[AEC_MAX_X_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE],
+    const int32_t ref[appconfMIC_PIPELINE_REF_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE])
+{
+    for (size_t i = 0; i < appconfAUDIO_PIPELINE_FRAME_ADVANCE; i++) {
+        x[0][i] = (int32_t)(((int64_t)ref[0][i] + ref[1][i]) >> 1);
+    }
+}
+
 static void stage_aec(frame_data_t *frame_data)
 {
 #if appconfAUDIO_PIPELINE_SKIP_AEC
 #else
-    int32_t DWORD_ALIGNED stage1_output[AEC_MAX_Y_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t DWORD_ALIGNED y[AEC_MAX_Y_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t DWORD_ALIGNED x[AEC_MAX_X_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
+    int32_t (*stage1_output)[appconfAUDIO_PIPELINE_FRAME_ADVANCE] = frame_data->aec_output;
+
+    for (size_t ch = 0; ch < AEC_MAX_Y_CHANNELS; ch++) {
+        for (size_t i = 0; i < appconfAUDIO_PIPELINE_FRAME_ADVANCE; i++) {
+            y[ch][i] = clamp_dsp_input_sample(frame_data->mic_samples_passthrough[ch][i]);
+        }
+    }
+    mix_reference_to_mono(x, frame_data->aec_reference_audio_samples);
 
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     int capture_current_frame = 0;
@@ -417,23 +441,22 @@ static void stage_aec(frame_data_t *frame_data)
             frame_data->debug_ref_input[ch][i] = frame_data->aec_reference_audio_samples[ch][i];
         }
     }
-    capture_current_frame = fixed_delay_aec_capture_begin_frame(
-        frame_data->samples,
-        frame_data->aec_reference_audio_samples);
+    capture_current_frame = fixed_delay_aec_capture_begin_frame(y, x);
 #endif
 
     aec_process_frame(
             &aec_state.state,
             stage1_output,
             NULL,
-            frame_data->samples,
-            frame_data->aec_reference_audio_samples);
+            y,
+            x);
 
     frame_data->max_ref_energy = aec_calc_max_input_energy(
-                                    frame_data->aec_reference_audio_samples,
+                                    x,
                                     aec_state.state.shared_state.num_x_channels);
     frame_data->aec_corr_factor = aec_calc_corr_factor(&aec_state.state.main_state, 0);
-    memcpy(frame_data->samples, stage1_output, AEC_MAX_Y_CHANNELS * appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
+    /* The tile-0 stages read mics 0-1 after the AEC from the processed channels */
+    memcpy(frame_data->samples, stage1_output, appconfMIC_PIPELINE_PROC_CHANNELS * appconfAUDIO_PIPELINE_FRAME_ADVANCE * sizeof(int32_t));
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     if (capture_current_frame) {
         fixed_delay_aec_capture_store_output(stage1_output);
