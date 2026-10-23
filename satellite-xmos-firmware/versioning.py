@@ -3,6 +3,7 @@ import dataclasses
 import datetime
 import filecmp
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -280,15 +281,20 @@ class TrackedDevBuild:
 
 
 def create_version_header_file(file_path:Path, version: XMOSVersion) -> None :
-    with file_path.open("w") as f:
-        f.write( VERSION_HEADER_TMPL.format(
+    """Write the version header unless it already holds this text; a rewrite is atomic."""
+    text = VERSION_HEADER_TMPL.format(
             str_repr=str(version),
             major=version.major,
             minor=version.minor,
             patch=version.patch,
             pre_release=version.pre_release,
             counter=version.pre_counter
-        ))
+        )
+    if file_path.exists() and file_path.read_text() == text:
+        return
+    tmp = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, file_path)
 
 def create_variant_version_file(file_path:Path, version: XMOSVersion) -> None:
     with file_path.open("w") as f:
