@@ -3,6 +3,10 @@
 //   voice_harness <in.wav> <out.wav>
 // in.wav: mic0 mic1 ref0 ref1, int32, 16 kHz. out.wav: aec0 aec1 ic, int32.
 // VNR inference is vnr_stub.c, so the IC sees the same VNR in both builds.
+//
+// HARNESS_4X1 (lib_voice only): the 4-mic AEC against one reference, the mono
+// mix (ref0 + ref1) / 2, as stage_aec runs it from SATELLITE1_AEC_SCHEDULE.
+// in.wav: mic0 mic1 mic2 mic3 ref0 ref1. out.wav: aec0 aec1 aec2 aec3.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -25,8 +29,13 @@ void aec_process_frame_1thread(aec_state_t *main_state, aec_state_t *shadow_stat
 #endif
 
 #define FRAME 240
+#ifdef HARNESS_4X1
+#define IN_CH 6
+#define OUT_CH 4
+#else
 #define IN_CH 4
 #define OUT_CH 3
+#endif
 
 static int read_wav(const char *path, int32_t **samples, uint32_t *frames)
 {
@@ -89,6 +98,29 @@ static aec_state_t DWORD_ALIGNED aec;
 #endif
 static ic_state_t DWORD_ALIGNED ic;
 
+#ifdef HARNESS_4X1
+extern aec_task_distribution_t tdist;
+
+static void run_4x1(const int32_t *in, int32_t *out, uint32_t hops)
+{
+    aec_init(&aec, AEC_MAX_Y_CHANNELS, AEC_MAX_X_CHANNELS,
+             AEC_MAIN_FILTER_PHASES, AEC_SHADOW_FILTER_PHASES, &tdist);
+    for (uint32_t h = 0; h < hops; h++) {
+        int32_t DWORD_ALIGNED y[4][FRAME], x[1][FRAME], aec_out[4][FRAME];
+        for (int i = 0; i < FRAME; i++) {
+            const int32_t *row = &in[((size_t)h * FRAME + i) * IN_CH];
+            for (int m = 0; m < 4; m++) y[m][i] = row[m];
+            x[0][i] = (int32_t)(((int64_t)row[4] + row[5]) >> 1);
+        }
+        aec_process_frame(&aec, aec_out, NULL, y, x);
+        for (int i = 0; i < FRAME; i++) {
+            int32_t *row = &out[((size_t)h * FRAME + i) * OUT_CH];
+            for (int m = 0; m < 4; m++) row[m] = aec_out[m][i];
+        }
+    }
+}
+#endif
+
 int main(int argc, char **argv)
 {
     if (argc != 3) {
@@ -104,6 +136,9 @@ int main(int argc, char **argv)
     uint32_t hops = frames / FRAME;
     int32_t *out = calloc((size_t)hops * FRAME * OUT_CH, 4);
 
+#ifdef HARNESS_4X1
+    run_4x1(in, out, hops);
+#else
 #ifdef VOICE_OLD
     aec_init(&aec_main, &aec_shadow, &aec_shared, aec_pool, aec_shadow_pool, 2, 2, 10, 5);
 #else
@@ -141,6 +176,7 @@ int main(int argc, char **argv)
             row[0] = aec_out[0][i]; row[1] = aec_out[1][i]; row[2] = ic_out[i];
         }
     }
+#endif
     if (write_wav(argv[2], out, hops * FRAME)) {
         fprintf(stderr, "%s: cannot write\n", argv[2]);
         return 1;

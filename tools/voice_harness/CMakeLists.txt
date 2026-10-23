@@ -29,3 +29,15 @@ target_compile_definitions(voice_harness PRIVATE
     $<$<BOOL:${VOICE_OLD}>:VOICE_OLD>)
 target_compile_options(voice_harness PRIVATE -O2 -w)
 target_link_libraries(voice_harness PRIVATE lib_xcore_math m)
+
+# The 4-mic, mono-reference AEC of the fixed_delay pipeline (lib_voice only),
+# scheduled as firmware.cmake's SATELLITE1_AEC_SCHEDULE.
+if(NOT VOICE_OLD)
+    include(${VOICE_ROOT}/lib_voice/aec_schedule.cmake)
+    add_executable(voice_harness_4x1 main.c vnr_stub.c ${VOICE_SOURCES})
+    target_include_directories(voice_harness_4x1 PRIVATE ${VOICE_INCLUDES})
+    generate_schedule(voice_harness_4x1 "1 4 1 10 5")
+    target_compile_definitions(voice_harness_4x1 PRIVATE HARNESS_4X1)
+    target_compile_options(voice_harness_4x1 PRIVATE -O2 -w)
+    target_link_libraries(voice_harness_4x1 PRIVATE lib_xcore_math m)
+endif()

@@ -1,12 +1,14 @@
 """Harness input clips: mic0 mic1 ref0 ref1, int32, 16 kHz (main.c's in.wav).
 
-  make_clip.py take <take_dir> <out.wav>
-      A satellite steering take (capture.wav lanes mic0, mic1; playback.wav as
+  make_clip.py take <take_dir> <out.wav> [--mics 2|4]
+      A satellite steering take (capture.wav lanes mic0..; playback.wav as
       both references, as the satellite plays mono on both). No labels.
-  make_clip.py synth <far.wav> <out.wav> [--seconds 40] [--seed 1]
+  make_clip.py synth <far.wav> <out.wav> [--seconds 40] [--seed 1] [--mics 2|4]
       Echo only: <far.wav> (any rate, mono, 16 bit) through a synthetic room
       response per mic, 10 ms bulk delay, plus -70 dBFS noise. Writes
       <out>.json with the echo-only frame range.
+
+--mics 4 writes mic0 mic1 mic2 mic3 ref0 ref1, the HARNESS_4X1 input.
 
 numpy only.
 """
@@ -50,12 +52,12 @@ def resample(x: np.ndarray, rate: int) -> np.ndarray:
     return np.fft.irfft(spec[:keep], n) * (n / len(x))
 
 
-def take_clip(take: Path) -> np.ndarray:
+def take_clip(take: Path, mics: int = 2) -> np.ndarray:
     cap, rate = read(take / "capture.wav")
     play, prate = read(take / "playback.wav")
     assert rate == prate == RATE and len(cap) == len(play), "capture and playback must align"
     ref = play[:, 0]
-    return np.stack([cap[:, 1], cap[:, 2], ref, ref], axis=1)
+    return np.stack([cap[:, 1 + m] for m in range(mics)] + [ref, ref], axis=1)
 
 
 def room_response(rng: np.random.Generator, rt60: float = 0.3, length_s: float = 0.12,
@@ -72,16 +74,16 @@ def room_response(rng: np.random.Generator, rt60: float = 0.3, length_s: float =
     return h / np.sqrt(np.sum(h ** 2))
 
 
-def synth_clip(far: Path, seconds: float, seed: int) -> tuple[np.ndarray, dict]:
+def synth_clip(far: Path, seconds: float, seed: int, mics: int = 2) -> tuple[np.ndarray, dict]:
     x, rate = read(far)
     ref = resample(x[:, 0], rate)[: int(seconds * RATE)]
     ref = 0.25 * ref / (np.max(np.abs(ref)) + 1e-12)
     rng = np.random.default_rng(seed)
-    mics = []
-    for _ in range(2):
+    chans = []
+    for _ in range(mics):
         echo = np.convolve(ref, room_response(rng))[: len(ref)] * 0.5
-        mics.append(echo + rng.standard_normal(len(ref)) * 10 ** (-70 / 20))
-    clip = np.stack([mics[0], mics[1], ref, ref], axis=1)
+        chans.append(echo + rng.standard_normal(len(ref)) * 10 ** (-70 / 20))
+    clip = np.stack(chans + [ref, ref], axis=1)
     labels = {"echo_only_frames": [0, len(ref) // FRAME], "seed": seed, "far": far.name}
     return clip, labels
 
@@ -92,11 +94,13 @@ def main() -> int:
     t = sub.add_parser("take"); t.add_argument("take_dir", type=Path); t.add_argument("out", type=Path)
     s = sub.add_parser("synth"); s.add_argument("far", type=Path); s.add_argument("out", type=Path)
     s.add_argument("--seconds", type=float, default=40.0); s.add_argument("--seed", type=int, default=1)
+    for p in (t, s):
+        p.add_argument("--mics", type=int, choices=(2, 4), default=2)
     a = ap.parse_args()
     if a.cmd == "take":
-        write(a.out, take_clip(a.take_dir))
+        write(a.out, take_clip(a.take_dir, a.mics))
     else:
-        clip, labels = synth_clip(a.far, a.seconds, a.seed)
+        clip, labels = synth_clip(a.far, a.seconds, a.seed, a.mics)
         write(a.out, clip)
         a.out.with_suffix(".json").write_text(json.dumps(labels))
     print(f"wrote {a.out}")

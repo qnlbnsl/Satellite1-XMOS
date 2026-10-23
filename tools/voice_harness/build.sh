@@ -5,6 +5,8 @@
 #   tools/voice_harness/build.sh <out_dir> <clip.wav>...
 # Writes <out_dir>/<clip>.old.wav and <clip>.new.wav per clip. Needs docker and,
 # once, network: fwk_voice and lib_xcore_math v2.4.0 are cached in <out_dir>/.src.
+# A 6-channel clip (make_clip.py --mics 4) runs only the 4-mic, mono-reference
+# AEC on lib_voice and writes <clip>.4x1.wav.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -18,7 +20,8 @@ for wav in "$@"; do
     args+=("/clips/$(basename "$dir")/$(basename "$wav")")
 done
 docker run --rm "${mounts[@]}" "$image" bash -ec '
-    command -v cmake >/dev/null || { apt-get update -qq && apt-get install -y -qq cmake >/dev/null; }
+    command -v cmake >/dev/null && command -v python >/dev/null && python -c "import numpy" 2>/dev/null || {
+        apt-get update -qq && apt-get install -y -qq cmake python-is-python3 python3-numpy >/dev/null; }
     src=/out/.src
     [ -d $src/fwk_voice ] || { git clone -q https://github.com/xmos/fwk_voice $src/fwk_voice && git -C $src/fwk_voice checkout -q e230d55; }
     [ -d $src/lib_xcore_math ] || git -c advice.detachedHead=false clone -q --depth 1 --branch v2.4.0 https://github.com/xmos/lib_xcore_math $src/lib_xcore_math
@@ -30,6 +33,11 @@ docker run --rm "${mounts[@]}" "$image" bash -ec '
     cmake --build /tmp/new -j"$(nproc)" >/dev/null
     for wav in "$@"; do
         name=$(basename "$wav" .wav)
+        if [ "$(python -c "import wave,sys; print(wave.open(sys.argv[1]).getnchannels())" "$wav")" = 6 ]; then
+            /tmp/new/voice_harness_4x1 "$wav" "/out/$name.4x1.wav"
+            echo "wrote /out/$name.4x1.wav"
+            continue
+        fi
         /tmp/old/voice_harness "$wav" "/out/$name.old.wav"
         /tmp/new/voice_harness "$wav" "/out/$name.new.wav"
         echo "wrote /out/$name.old.wav /out/$name.new.wav"
