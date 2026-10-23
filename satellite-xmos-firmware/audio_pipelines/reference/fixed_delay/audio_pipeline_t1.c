@@ -279,7 +279,8 @@ static void fixed_delay_aec_capture_store_output(
 }
 #endif
 
-#define AUDIO_PIPELINE_DSP_SAMPLE_LIMIT ((int32_t)0x00400000)
+/* Full scale: the mics already carry the fixed 10x gain, so a lower limit clips speech at the AEC input. */
+#define AUDIO_PIPELINE_DSP_SAMPLE_LIMIT ((int32_t)INT32_MAX)
 
 static int32_t clamp_dsp_input_sample(int32_t sample)
 {
