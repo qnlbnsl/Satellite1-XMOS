@@ -73,7 +73,7 @@ typedef struct {
     uint8_t chain_beams_on;
     uint8_t chain_canceller_on;
     uint8_t chain_canceller_variant;
-    uint8_t chain_beam;         /* the picker's leader when the frame left tile 1 */
+    uint8_t chain_beam;         /* the picker's leader when the frame left tile 1: the beams tap's beam */
     uint8_t chain_target_valid; /* the direction finder's stabilised target, as the frame left tile 1 */
     float chain_target_deg;
     float chain_scores[CHAIN_BEAMS_COUNT];  /* tile 0: each canceller's smoothed input VNR */
@@ -94,8 +94,8 @@ typedef struct {
 #endif
 } frame_data_t;
 
-/* The beams and blocking signals tile 1 sends with each frame. On tile 0 the
- * cancellers overwrite `beams` with their cleaned outputs. */
+/* One frame's beams and blocking signals, on tile 0 only: the beams stage fills
+ * them from aec_output, then the cancellers overwrite `beams` with their cleaned outputs. */
 typedef struct {
     int32_t beams[CHAIN_BEAMS_COUNT][AP_FRAME_ADVANCE];
     int32_t blocking[CHAIN_BEAMS_COUNT][AP_FRAME_ADVANCE];

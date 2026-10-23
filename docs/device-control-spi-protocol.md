@@ -518,9 +518,9 @@ are little-endian.
   - `aec` (clear): `on` and `BYPASS_ALL` bypass it through lib_voice's own
     bypass; its tail and step size are the build's;
   - `beams` (clear): four superdirective beams at 0/90/180/270 degrees and one
-    blocking signal each (`modules/fph/chain_beams`), on tile 1. The weights are
-    generated at `loading` 0.1. Off, beam k is mic k and its blocking signal the
-    opposite mic;
+    blocking signal each (`modules/fph/chain_beams`), on tile 0 from the echo
+    canceller's output. The weights are generated at `loading` 0.1. Off, beam k
+    is mic k and its blocking signal the opposite mic;
   - `canceller` (clear): four stock lib_ic instances on tile 0, y = beam,
     x = its blocking signal; the variant chooses the VNR its adaption reads
     (`modules/fph/chain_canceller`). The tail is lib_ic's `IC_FILTER_PHASES`

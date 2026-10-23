@@ -42,10 +42,6 @@ static stage_delay_ctx_t DWORD_ALIGNED delay_buf_state = {};
 static aec_ctx_t DWORD_ALIGNED aec_state = {};
 #endif
 
-/* stage_beams fills it; audio_pipeline_output_i, on the same task, sends it after the frame */
-static chain_beams_t DWORD_ALIGNED chain_beams_state;
-static chain_xfer_t DWORD_ALIGNED chain_xfer;
-
 /* The finishing task: picker, post-filter and gain control on the cleaned beams tile 0 returns */
 static chain_picker_t DWORD_ALIGNED chain_picker_state;
 static ns_stage_ctx_t DWORD_ALIGNED ns_stage_state = {};
@@ -380,11 +376,10 @@ static int audio_pipeline_output_i(frame_data_t *frame_data,
     audio_pipeline_tile1_debug.output_enter++;
     audio_pipeline_tile1_debug.tx_before++;
 #endif
-    rtos_intertile_tx_len(intertile_ctx,
-                          appconfAUDIOPIPELINE_PORT,
-                          sizeof(frame_data_t) + sizeof(chain_xfer_t));
-    rtos_intertile_tx_data(intertile_ctx, frame_data, sizeof(frame_data_t));
-    rtos_intertile_tx_data(intertile_ctx, &chain_xfer, sizeof(chain_xfer_t));
+    rtos_intertile_tx(intertile_ctx,
+                      appconfAUDIOPIPELINE_PORT,
+                      frame_data,
+                      sizeof(frame_data_t));
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     audio_pipeline_tile1_debug.tx_after++;
 #endif
@@ -514,22 +509,6 @@ static void stage_aec(frame_data_t *frame_data)
 #endif
 }
 
-/* The four beams and their blocking signals from the four mics after the AEC,
- * into chain_xfer; lane 0's beams tap is the beam the picker last led with. */
-static void stage_beams(frame_data_t *frame_data)
-{
-    if (frame_data->chain_beams_on) {
-        chain_beams_process(&chain_beams_state, &frame_data->aec_output[0][0],
-                            &chain_xfer.beams[0][0], &chain_xfer.blocking[0][0]);
-    } else {
-        chain_beams_bypass(&frame_data->aec_output[0][0], &chain_xfer.beams[0][0], &chain_xfer.blocking[0][0]);
-    }
-    if (frame_data->chain_tap == CHAIN_TAP_BEAMS) {
-        memcpy(frame_data->chain_tap_samples, chain_xfer.beams[frame_data->chain_beam],
-               sizeof(frame_data->chain_tap_samples));
-    }
-}
-
 static float db_to_lin(float db)
 {
     return powf(10.0f, db / 20.0f);
@@ -603,7 +582,6 @@ static void initialize_chain(void)
 {
     chain_frame_ctrl_t c;
 
-    chain_beams_init(&chain_beams_state);
     chain_picker_init(&chain_picker_state);
     ns_init(&ns_stage_state.state);
     agc_init(&agc_stage_state.state, &AGC_PROFILE_ASR);
@@ -653,17 +631,15 @@ void audio_pipeline_init(
     void *input_app_data,
     void *output_app_data)
 {
-    const int stage_count = 3;
+    const int stage_count = 2;
     const pipeline_stage_t stages[] = {
         (pipeline_stage_t)stage_delay,
         (pipeline_stage_t)stage_aec,
-        (pipeline_stage_t)stage_beams,
     };
 
     const configSTACK_DEPTH_TYPE stage_stack_sizes[] = {
         configMINIMAL_STACK_SIZE + RTOS_THREAD_STACK_SIZE(stage_delay) + RTOS_THREAD_STACK_SIZE(audio_pipeline_input_i),
-        configMINIMAL_STACK_SIZE + RTOS_THREAD_STACK_SIZE(stage_aec),
-        configMINIMAL_STACK_SIZE + RTOS_THREAD_STACK_SIZE(stage_beams) + RTOS_THREAD_STACK_SIZE(audio_pipeline_output_i),
+        configMINIMAL_STACK_SIZE + RTOS_THREAD_STACK_SIZE(stage_aec) + RTOS_THREAD_STACK_SIZE(audio_pipeline_output_i),
     };
 
     initialize_pipeline_stages();

@@ -53,11 +53,13 @@ const build_variant_t audio_pipeline_build_variant = {
 #if ON_TILE(0)
 /* One stock lib_ic per beam; two run in each of the two canceller stages. */
 static ic_state_t DWORD_ALIGNED chain_ics[CHAIN_BEAMS_COUNT];
+static chain_beams_t DWORD_ALIGNED chain_beams_state;     /* stage_cancel_01 only */
 static rtos_osal_mutex_t chain_vnr_mutex;      /* lib_voice's VNR model is one instance */
 static chain_finish_rep_t DWORD_ALIGNED chain_finish_rep;
 
-/* A frame on tile 0: what tile 1 sends, the frame and the beams after it, and
- * each canceller's input VNR this frame before smoothing. */
+/* A frame on tile 0: the frame tile 1 sends, then the beams and blocking signals
+ * stage_cancel_01 computes from its aec_output, and each canceller's input VNR
+ * this frame before smoothing. */
 typedef struct {
     frame_data_t frame;                         /* first: the stages take it as a frame_data_t */
     chain_xfer_t xfer;
@@ -110,10 +112,9 @@ static void *audio_pipeline_input_i(void *input_app_data)
     audio_pipeline_tile0_debug.last_rx_len = bytes_received;
 #endif
 
-    xassert(bytes_received == sizeof(frame_data_t) + sizeof(chain_xfer_t));
+    xassert(bytes_received == sizeof(frame_data_t));
 
     rtos_intertile_rx_data(intertile_ctx, frame_data, sizeof(frame_data_t));
-    rtos_intertile_rx_data(intertile_ctx, &((t0_frame_t *) frame_data)->xfer, sizeof(chain_xfer_t));
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     audio_pipeline_tile0_debug.rx_data_after++;
 #endif
@@ -134,7 +135,7 @@ static void apply_chain_tap(frame_data_t *frame_data)
     case CHAIN_TAP_AEC:
         src = frame_data->aec_output[0];
         break;
-    case CHAIN_TAP_BEAMS:       /* taken on tile 1 */
+    case CHAIN_TAP_BEAMS:
     case CHAIN_TAP_CANCELLER:
     case CHAIN_TAP_POST:
         src = frame_data->chain_tap_samples;
@@ -223,8 +224,28 @@ static void chain_cancel(frame_data_t *frame_data, int first)
     }
 }
 
+/* The four beams and their blocking signals from the four mics after the AEC, into
+ * the frame's xfer; off, beam k is mic k. Lane 0's beams tap is the beam the picker
+ * last led with. */
+static void chain_beams_stage(frame_data_t *frame_data)
+{
+    chain_xfer_t *x = &((t0_frame_t *) frame_data)->xfer;
+
+    if (frame_data->chain_beams_on) {
+        chain_beams_process(&chain_beams_state, &frame_data->aec_output[0][0],
+                            &x->beams[0][0], &x->blocking[0][0]);
+    } else {
+        chain_beams_bypass(&frame_data->aec_output[0][0], &x->beams[0][0], &x->blocking[0][0]);
+    }
+    if (frame_data->chain_tap == CHAIN_TAP_BEAMS) {
+        memcpy(frame_data->chain_tap_samples, x->beams[frame_data->chain_beam],
+               sizeof(frame_data->chain_tap_samples));
+    }
+}
+
 static void stage_cancel_01(frame_data_t *frame_data)
 {
+    chain_beams_stage(frame_data);
     chain_cancel(frame_data, 0);
 }
 
@@ -310,6 +331,7 @@ static void initialize_pipeline_stages(void)
                                      RTOS_OSAL_NO_WAIT) == RTOS_OSAL_SUCCESS);
     }
 
+    chain_beams_init(&chain_beams_state);
     for (size_t k = 0; k < CHAIN_BEAMS_COUNT; k++) {
         ic_init(&chain_ics[k]);
     }
