@@ -17,9 +17,11 @@
 #include "chain_control.h"
 
 /* Modules this firmware runs in its audio path. `applied` is 1 only when every
- * one of the module's settings takes effect; the echo canceller honours on and
- * bypass, while its tail and step size are fixed by the build. */
+ * one of the module's settings takes effect. Trim applies one broadband gain per
+ * mic and plays no chime; the echo canceller honours on and bypass, while its
+ * tail and step size are fixed by the build. */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
+    { CHAIN_MODULE_TRIM, 0 },
     { CHAIN_MODULE_AEC, 0 },
 };
 
@@ -163,6 +165,48 @@ static uint8_t check_scalar(const chain_setting_spec_t *s, uint32_t bits)
     }
 }
 
+/* Each mic's trim gain: the float mean of its band trims in dB, as Q4.28. */
+static void trim_update(chain_control_t *cc)
+{
+    int mi = module_index(CHAIN_MODULE_TRIM);
+    int si = mi < 0 ? -1 : setting_index(&chain_modules[mi], CHAIN_SETTING_TRIM_TRIMS);
+
+    for (int m = 0; m < CHAIN_MICS; m++) {
+        cc->trim_gain[m] = CHAIN_TRIM_UNITY;
+    }
+    if (si < 0) {
+        return;
+    }
+    const float *b = &cc->blobs[blob_base(mi, si)];
+    uint16_t bands = (uint16_t)(chain_modules[mi].settings[si].floats / CHAIN_MICS);
+    for (int m = 0; m < CHAIN_MICS; m++) {
+        float sum = 0.0f;
+        for (uint16_t k = 0; k < bands; k++) {
+            sum += b[m * bands + k];
+        }
+        float db = sum / (float)bands;
+        float lin = powf(10.0f, db / 20.0f);
+        cc->trim_gain[m] = (int32_t)lroundf(lin * (float)CHAIN_TRIM_UNITY);
+    }
+}
+
+void chain_trim_frame(int32_t *out, const int32_t *in, const int32_t gain[CHAIN_MICS])
+{
+    for (int m = 0; m < CHAIN_MICS; m++) {
+        const int32_t *x = &in[m * CHAIN_HOP];
+        int32_t *y = &out[m * CHAIN_HOP];
+        if (gain[m] == CHAIN_TRIM_UNITY) {
+            memcpy(y, x, CHAIN_HOP * sizeof(int32_t));
+            continue;
+        }
+        for (int i = 0; i < CHAIN_HOP; i++) {
+            int64_t v = ((int64_t)x[i] * gain[m] + ((int64_t)1 << (CHAIN_TRIM_SHIFT - 1)))
+                        >> CHAIN_TRIM_SHIFT;
+            y[i] = v > INT32_MAX ? INT32_MAX : v < INT32_MIN ? INT32_MIN : (int32_t)v;
+        }
+    }
+}
+
 void chain_control_init(chain_control_t *cc, const uint8_t firmware[5], uint32_t nonce)
 {
     memset(cc, 0, sizeof(*cc));
@@ -182,6 +226,7 @@ void chain_control_init(chain_control_t *cc, const uint8_t firmware[5], uint32_t
             }
         }
     }
+    trim_update(cc);
     cc->tap = CHAIN_TAP_DEFAULT;
     cc->nonce = nonce;
     memcpy(cc->firmware, firmware, sizeof(cc->firmware));
@@ -282,6 +327,9 @@ static uint8_t do_blob_write(chain_control_t *cc, const uint8_t *p, size_t len, 
     float *dst = &cc->blobs[blob_base(mi, si)];
     for (uint16_t k = 0; k < s->floats; k++) {
         dst[k] = bits_float(rd32(&cc->stage[4 * k]));
+    }
+    if (p[0] == CHAIN_MODULE_TRIM && p[1] == CHAIN_SETTING_TRIM_TRIMS) {
+        trim_update(cc);
     }
     return 0;
 }
@@ -517,10 +565,15 @@ uint8_t chain_control_read(chain_control_t *cc, uint8_t cmd,
 void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_t *out)
 {
     int aec = module_index(CHAIN_MODULE_AEC);
+    int trim = module_index(CHAIN_MODULE_TRIM);
+    int trim_on = !cc->bypass_all && trim >= 0 && cc->modules[trim].on;
 
     revert_tap(cc, now_ms);
     out->tap = cc->tap;
     out->aec_bypass = cc->bypass_all || (aec >= 0 && !cc->modules[aec].on);
+    for (int m = 0; m < CHAIN_MICS; m++) {
+        out->mic_gain[m] = trim_on ? cc->trim_gain[m] : CHAIN_TRIM_UNITY;
+    }
 }
 
 #endif /* CHAIN_CONTROL_HERE */

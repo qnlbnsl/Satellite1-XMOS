@@ -28,6 +28,10 @@
 #error This pipeline is only configured for 240 frame advance
 #endif
 
+_Static_assert(CHAIN_MICS == appconfMIC_PIPELINE_INPUT_CHANNELS && CHAIN_MICS == AEC_MAX_Y_CHANNELS &&
+               CHAIN_HOP == appconfAUDIO_PIPELINE_FRAME_ADVANCE,
+               "the trim scales every mic the AEC reads, one hop at a time");
+
 #if ON_TILE(1)
 #if appconfINPUT_SAMPLES_MIC_DELAY_MS != 0
 static stage_delay_ctx_t DWORD_ALIGNED delay_buf_state = {};
@@ -336,6 +340,7 @@ static void *audio_pipeline_input_i(void *input_app_data)
     chain_control_frame_get(&chain_ctrl);
     frame_data->chain_tap = chain_ctrl.tap;
     frame_data->chain_aec_bypass = chain_ctrl.aec_bypass;
+    memcpy(frame_data->chain_mic_gain, chain_ctrl.mic_gain, sizeof(frame_data->chain_mic_gain));
 
     copy_mic_passthrough_to_processing(frame_data);
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
@@ -430,9 +435,11 @@ static void stage_aec(frame_data_t *frame_data)
     int32_t DWORD_ALIGNED x[AEC_MAX_X_CHANNELS][appconfAUDIO_PIPELINE_FRAME_ADVANCE];
     int32_t (*stage1_output)[appconfAUDIO_PIPELINE_FRAME_ADVANCE] = frame_data->aec_output;
 
+    /* Trim before the AEC; the raw lanes keep the untrimmed mics */
+    chain_trim_frame(&y[0][0], &frame_data->mic_samples_passthrough[0][0], frame_data->chain_mic_gain);
     for (size_t ch = 0; ch < AEC_MAX_Y_CHANNELS; ch++) {
         for (size_t i = 0; i < appconfAUDIO_PIPELINE_FRAME_ADVANCE; i++) {
-            y[ch][i] = clamp_dsp_input_sample(frame_data->mic_samples_passthrough[ch][i]);
+            y[ch][i] = clamp_dsp_input_sample(y[ch][i]);
         }
     }
     mix_reference_to_mono(x, frame_data->aec_reference_audio_samples);

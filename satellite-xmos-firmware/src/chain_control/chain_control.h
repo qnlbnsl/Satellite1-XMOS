@@ -9,6 +9,10 @@
 
 #include "chain_contract.h"
 
+/* Trim gains are Q4.28: CHAIN_TRIM_UNITY is 0 dB. */
+#define CHAIN_TRIM_SHIFT 28
+#define CHAIN_TRIM_UNITY ((int32_t)1 << CHAIN_TRIM_SHIFT)
+
 typedef struct {
     uint8_t on;
     uint8_t variant;                      /* wire number; 0 when the module has none */
@@ -27,12 +31,14 @@ typedef struct {
     uint8_t bypass_all;
     uint32_t nonce;
     uint8_t firmware[5];
+    int32_t trim_gain[CHAIN_MICS];        /* each mic's gain from the accepted trims, Q4.28 */
 } chain_control_t;
 
 /* What the audio path applies to one frame. */
 typedef struct {
     uint8_t tap;            /* CHAIN_TAP_*: what lane 0 carries */
     uint8_t aec_bypass;     /* 1: the echo canceller passes the mics through */
+    int32_t mic_gain[CHAIN_MICS];  /* trim per mic, Q4.28; CHAIN_TRIM_UNITY when trim is off */
 } chain_frame_ctrl_t;
 
 /* Every module at its contract defaults, the default tap, no bypass_all. */
@@ -50,6 +56,11 @@ uint8_t chain_control_read(chain_control_t *cc, uint8_t cmd,
 
 /* The controls for the next frame; reverts a tap left on for CHAIN_TAP_REVERT_S. */
 void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_t *out);
+
+/* out = in scaled by gain per mic, (x * gain + 2^27) >> 28 saturated to int32.
+ * Both hold CHAIN_MICS rows of CHAIN_HOP samples. Each mic's gain is the mean
+ * of its band trims in dB (chain_control.c). */
+void chain_trim_frame(int32_t *out, const int32_t *in, const int32_t gain[CHAIN_MICS]);
 
 /* zlib's crc32 of data[0..len). */
 uint32_t chain_crc32(const uint8_t *data, size_t len);

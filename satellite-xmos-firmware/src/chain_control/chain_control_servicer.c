@@ -74,6 +74,9 @@ void chain_control_frame_get(chain_frame_ctrl_t *out)
     if (!chain_ready) {
         out->tap = CHAIN_TAP_DEFAULT;
         out->aec_bypass = 0;
+        for (int m = 0; m < CHAIN_MICS; m++) {
+            out->mic_gain[m] = CHAIN_TRIM_UNITY;
+        }
         return;
     }
     int lock = rtos_osal_critical_enter();
@@ -130,6 +133,9 @@ void chain_control_frame_get(chain_frame_ctrl_t *out)
 {
     out->tap = CHAIN_TAP_DEFAULT;
     out->aec_bypass = 0;
+    for (int m = 0; m < CHAIN_MICS; m++) {
+        out->mic_gain[m] = CHAIN_TRIM_UNITY;
+    }
 }
 
 #endif

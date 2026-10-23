@@ -465,9 +465,17 @@ are little-endian.
   commits it if the crc32 (zlib) of the whole blob matches and every value is in
   bounds. In `MODULE`, a blob's value is the crc32 of its contents.
 - `STATE` flags per module: `1` runs in this firmware's audio path, `2` on, `4`
-  every setting takes effect. This build runs the echo canceller (`aec`): `on`
-  and `BYPASS_ALL` bypass it through lib_voice's own bypass; its tail and step
-  size are the build's, so flag `4` is clear.
+  every setting takes effect. This build runs two modules, both with flag `4`
+  clear:
+  - the microphone trim (`trim`), on the four raw mics before the echo
+    canceller. Each mic gets one broadband gain, the mean of its 16 band trims
+    in dB (Q4.28, rounded half up, saturated to int32, then the pipeline's input
+    clamp). The band shape and the chime settings take no effect on the chip.
+    `on` = 0 or `BYPASS_ALL` makes every gain 0 dB. The trims start at 0 dB at
+    boot and change only when a whole `trims` blob is committed. The raw mic
+    lanes stay untrimmed; the AEC lanes, and taps `2` and `3`, are trimmed;
+  - the echo canceller (`aec`): `on` and `BYPASS_ALL` bypass it through
+    lib_voice's own bypass; its tail and step size are the build's.
 - The fingerprint is the first 8 bytes of the sha256 of `chain_contract.jsonl`,
   the module hash the first 8 bytes of the sha256 of that module's line. The
   nonce is drawn from the reference timer at the first command after boot.

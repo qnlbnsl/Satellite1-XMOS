@@ -62,6 +62,7 @@ typedef struct {
     /* Below is additional context needed by other stages on a per frame basis */
     uint8_t chain_tap;          /* CHAIN_TAP_*: what output channel 0 carries */
     uint8_t chain_aec_bypass;   /* both read from the chain control resource on tile 1 */
+    int32_t chain_mic_gain[appconfMIC_PIPELINE_INPUT_CHANNELS]; /* trim, Q4.28, read with them */
     int32_t vnr_pred_flag;
     float_s32_t output_vnr_pred;
     float_s32_t max_ref_energy;
