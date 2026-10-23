@@ -2,16 +2,22 @@
 // over a WAV, built against fwk_voice 0.8.0 (VOICE_OLD) or lib_voice develop.
 //   voice_harness <in.wav> <out.wav>
 // in.wav: mic0 mic1 ref0 ref1, int32, 16 kHz. out.wav: aec0 aec1 ic, int32.
-// VNR inference is vnr_stub.c, so the IC sees the same VNR in both builds.
+// VNR inference is vnr_stub.c: 0 in both builds, or the model when vnr_run.py
+// drives this file as a library. Either way <out.wav>.vnr gets four float32 per
+// frame: IC input VNR raw and smoothed, IC output VNR raw and smoothed. The
+// output VNR is the one the AGC uses; on lib_voice it is computed here as
+// stage_vnr_and_ic does on the chip.
 //
 // HARNESS_4X1 (lib_voice only): the 4-mic AEC against one reference, the mono
 // mix (ref0 + ref1) / 2, as stage_aec runs it from SATELLITE1_AEC_SCHEDULE.
 // in.wav: mic0 mic1 mic2 mic3 ref0 ref1. out.wav: aec0 aec1 aec2 aec3.
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 #ifdef VOICE_OLD
 #include "aec_api.h"
@@ -26,7 +32,14 @@ void aec_process_frame_1thread(aec_state_t *main_state, aec_state_t *shadow_stat
 #include "aec.h"
 #include "aec_schedule.h"
 #include "ic.h"
+#include "vnr_features_api.h"
+#include "vnr_inference_api.h"
 #endif
+
+extern float harness_vnr_raw[4];
+extern int harness_vnr_calls;
+
+static float vnr_f(float_s32_t v) { return ldexpf((float)v.mant, v.exp); }
 
 #define FRAME 240
 #ifdef HARNESS_4X1
@@ -145,6 +158,18 @@ int main(int argc, char **argv)
     aec_init(&aec, 2, 2, 10, 5, &aec_tdist_chans2_threads1);
 #endif
     ic_init(&ic);
+#ifndef VOICE_OLD
+    static vnr_feature_state_t output_features;
+    vnr_feature_state_init(&output_features);
+    float_s32_t output_vnr_pred = f32_to_float_s32(0.5f);    /* VNR_INIT_OUTPUT_PRED */
+#endif
+    char vnr_path[4096];
+    snprintf(vnr_path, sizeof vnr_path, "%s.vnr", argv[2]);
+    FILE *vnr_log = fopen(vnr_path, "wb");
+    if (!vnr_log) {
+        fprintf(stderr, "%s: cannot write\n", vnr_path);
+        return 1;
+    }
 
     for (uint32_t h = 0; h < hops; h++) {
         int32_t DWORD_ALIGNED y[2][FRAME], x[2][FRAME], aec_out[2][FRAME], ic_out[FRAME];
@@ -163,19 +188,40 @@ int main(int argc, char **argv)
         memcpy(ic_x, aec_out[1], sizeof ic_x);
         ic_filter(&ic, ic_y, ic_x, ic_out);
         float_s32_t input_vnr;
+        float vnr_row[4];
+        harness_vnr_calls = 0;
 #ifdef VOICE_OLD
         float_s32_t output_vnr;
         ic_calc_vnr_pred(&ic, &input_vnr, &output_vnr);
+        vnr_row[1] = vnr_f(input_vnr);
+        vnr_row[3] = vnr_f(output_vnr);
         ic_adapt(&ic, input_vnr);
 #else
         ic_calc_vnr_pred(&ic, &input_vnr);
+        /* stage_vnr_and_ic: the output VNR from the IC's error spectrum */
+        bfp_s32_t feature_patch;
+        int32_t feature_patch_data[VNR_PATCH_WIDTH * VNR_MEL_FILTERS];
+        float_s32_t output_vnr;
+        vnr_extract_features(&output_features, &feature_patch, feature_patch_data, &ic.Error_bfp[0]);
+        vnr_inference(&output_vnr, &feature_patch);
+        output_vnr_pred = float_s32_ema(output_vnr_pred, output_vnr, ic.vnr_pred_state.pred_alpha_q30);
+        vnr_row[1] = vnr_f(ic.vnr_pred_state.input_vnr_pred);
+        vnr_row[3] = vnr_f(output_vnr_pred);
         ic_adapt(&ic);
 #endif
+        if (harness_vnr_calls != 2) {
+            fprintf(stderr, "frame %u: %d inferences, expected 2\n", h, harness_vnr_calls);
+            return 1;
+        }
+        vnr_row[0] = harness_vnr_raw[0];
+        vnr_row[2] = harness_vnr_raw[1];
+        fwrite(vnr_row, sizeof vnr_row, 1, vnr_log);
         for (int i = 0; i < FRAME; i++) {
             int32_t *row = &out[((size_t)h * FRAME + i) * OUT_CH];
             row[0] = aec_out[0][i]; row[1] = aec_out[1][i]; row[2] = ic_out[i];
         }
     }
+    fclose(vnr_log);
 #endif
     if (write_wav(argv[2], out, hops * FRAME)) {
         fprintf(stderr, "%s: cannot write\n", argv[2]);
