@@ -10,6 +10,9 @@ set(APP_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}/src/dfu_int
 )
 
+# The generated chain contract header must be what its generator wrote.
+include(${CMAKE_CURRENT_LIST_DIR}/chain_contract_check.cmake)
+
 include(${CMAKE_CURRENT_LIST_DIR}/bsp_config/bsp_config.cmake)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/audio_pipelines)
 

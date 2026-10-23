@@ -28,6 +28,7 @@
 #include "speaker_pipeline.h"
 #include "audio_runtime/audio_runtime_gain.h"
 #include "audio_pipeline_control/audio_pipeline_control_servicer.h"
+#include "chain_control/chain_control_servicer.h"
 #include "dfu_servicer.h"
 #include "gpio/gpio_servicer.h"
 #include "led_ring/led_ring_servicer.h"
@@ -969,6 +970,27 @@ void startup_task(void *arg)
         appconfDEVICE_CONTROL_SPI_PRIORITY,
         NULL
     );
+
+#if appconfCHAIN_CONTROL_ENABLED
+    /* Before audio_pipeline_init() below: the first frame reads its controls. */
+    static servicer_t chain_control_servicer_state;
+    static servicer_register_ctx_t chain_control_reg_ctx;
+
+    chain_control_servicer_init(&chain_control_servicer_state);
+    chain_control_reg_ctx.servicer = &chain_control_servicer_state;
+    chain_control_reg_ctx.device_control_ctx = device_control_ctx;
+    chain_control_reg_ctx.device_control_ctx_count = 1;
+    chain_control_reg_ctx.app_data = NULL;
+
+    xTaskCreate(
+        chain_control_servicer,
+        "chain ctrl",
+        RTOS_THREAD_STACK_SIZE(chain_control_servicer),
+        &chain_control_reg_ctx,
+        appconfDEVICE_CONTROL_SPI_PRIORITY,
+        NULL
+    );
+#endif
 
 #if appconfDOA_ENABLED && ON_TILE(DOA_TILE_NO)
     /* Before audio_pipeline_init() below, so the first frame finds the queue. */

@@ -12,6 +12,11 @@
 #define BUILTIN_TESTS_SPI_ECHO_SERVICER 0
 #endif
 
+/* The chain control resource (src/chain_control), on the speaker-pipeline tile */
+#ifndef appconfCHAIN_CONTROL_ENABLED
+#define appconfCHAIN_CONTROL_ENABLED 1
+#endif
+
 /*
  * Base SQ66/SATELLITE1 servicers under appconfDEVICE_CTRL_SPI:
  * - GPIO servicer
@@ -25,4 +30,5 @@
     (APP_DEVICE_CTRL_BASE_SERVICER_COUNT + \
      appconfAUDIO_CFG_SERVICER_COMPAT_ENABLED + \
      appconfLED_RING + \
+     !!(appconfCHAIN_CONTROL_ENABLED) + \
      !!(BUILTIN_TESTS_SPI_ECHO_SERVICER))
