@@ -432,6 +432,10 @@ static void mix_reference_to_mono(
 
 static void stage_aec(frame_data_t *frame_data)
 {
+#if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
+    /* Counts every frame, so the stage snapshot advances with or without the AEC */
+    frame_data->debug_frame_counter = ++fixed_delay_debug_frame_counter;
+#endif
 #if appconfAUDIO_PIPELINE_SKIP_AEC
     /* No echo canceller: its lanes and the tile-0 input carry the trimmed mics, as a bypass does */
     chain_trim_frame(&frame_data->aec_output[0][0], &frame_data->mic_samples_passthrough[0][0], frame_data->chain_mic_gain);
@@ -452,7 +456,6 @@ static void stage_aec(frame_data_t *frame_data)
 
 #if appconfDEVICE_CTRL_SPI && appconfAUDIO_PIPELINE_DEVELOPMENT_DEBUG
     int capture_current_frame = 0;
-    frame_data->debug_frame_counter = ++fixed_delay_debug_frame_counter;
     frame_data->debug_aec_x_energy_recalc_bin = aec_state.state.shared_state.X_energy_recalc_bin;
     for (size_t ch = 0; ch < 2; ch++) {
         for (size_t i = 0; i < 4; i++) {
