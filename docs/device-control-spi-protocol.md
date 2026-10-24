@@ -283,12 +283,13 @@ translation of satellite's `prototype/doa/ring.py`):
   of it one LED further out, in colour R, G, B = `0, 80, 255`.
 - It glides to a new direction on a critically damped spring that settles in
   0.4 s; turning the pointer on starts it at the current direction, at rest.
-- **The host's frame is layered on top.** Every pixel the host's last
-  `WRITE_RAW` lit stays as the host drew it; the arc shows only on the pixels
-  the host left dark (`0, 0, 0`). So a mute overlay composited into the host's
-  frame still wins, and a host that wants the bare arc writes a dark frame.
-- Turning the pointer off shows the host's last frame again at once. Until the
-  direction task has locked, the ring shows the host's frame alone.
+- **The ring has one owner.** While the pointer is on, the chip owns all 24
+  LEDs and shows the arc alone; a host `WRITE_RAW` is kept but not shown, mute
+  overlay included. Before the direction task's first lock the ring is dark,
+  and while the lock is lost the arc stays where it was.
+- Turning the pointer off shows the host's last frame again at once, including
+  one written while the pointer was on. A host that wants the ring back turns
+  the pointer off.
 - The pointer writes the ring only when the shown frame changes, so a settled
   arc costs no LED writes.
 

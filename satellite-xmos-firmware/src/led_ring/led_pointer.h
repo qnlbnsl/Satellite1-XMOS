@@ -1,7 +1,7 @@
-// The LED pointer: an arc on the ring that glides towards the talker, drawn
-// on the pixels the host leaves dark. A C translation of satellite's
-// prototype/doa/ring.py (Glide, arc_pixels) plus the layering with the
-// host's frames. Pure C, no RTOS calls: tools/led_pointer_harness builds the
+// The LED pointer: an arc on the ring that glides towards the talker. While
+// it is on the chip owns all the LEDs; while it is off the host does. A C
+// translation of satellite's prototype/doa/ring.py (Glide, arc_pixels) plus
+// that hand-over. Pure C, no RTOS calls: tools/led_pointer_harness builds the
 // same file for x86.
 #pragma once
 
@@ -36,22 +36,24 @@ typedef struct {
     uint8_t shown[LED_POINTER_BYTES];   /* what the ring was last given */
     led_glide_t glide;
     uint8_t enabled;                    /* enable as seen by the last tick */
-    uint8_t drawing;                    /* the arc is part of `shown` */
+    uint8_t aimed;                      /* `arc` holds a direction since enable came on */
 } led_pointer_t;
 
 /* Dark ring, dark host frame, pointer off. */
 void led_pointer_init(led_pointer_t *p);
 
-/* Takes a host frame (GRB) and writes the frame the ring must show into out:
- * the host frame itself, or while the arc is drawn, each host pixel that is
- * lit and the arc on every host pixel that is dark. The caller always writes
- * out to the ring. */
+/* Keeps a host frame (GRB) and writes the frame the ring must show into out:
+ * the host frame while the pointer is off; while it is on, the arc, or a dark
+ * ring until the first valid target. The caller always writes out to the
+ * ring. */
 void led_pointer_host_frame(led_pointer_t *p, const uint8_t grb[LED_POINTER_BYTES],
                             uint8_t out[LED_POINTER_BYTES]);
 
-/* One pointer tick, dt_s after the last. The arc is drawn while `enabled` and
- * `valid`, from `target_deg` through the glide; turning `enabled` on restarts
- * the glide at the next valid target. Returns 1 and the frame in out when the
- * ring must change, else 0 and out untouched. */
+/* One pointer tick, dt_s after the last. While `enabled` the ring shows only
+ * the arc, moved from `target_deg` through the glide on each `valid` tick and
+ * held where it is on the others; dark until the first valid target. Turning
+ * `enabled` on restarts the glide; turning it off shows the host's last frame.
+ * Returns 1 and the frame in out when the ring must change, else 0 and out
+ * untouched. */
 int led_pointer_tick(led_pointer_t *p, int enabled, int valid, float target_deg, float dt_s,
                      uint8_t out[LED_POINTER_BYTES]);

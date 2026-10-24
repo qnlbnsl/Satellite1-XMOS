@@ -8,9 +8,9 @@
 
 #define LED_POINTER_PERIOD_MS 33       /* about 30 frames a second, as the Pi's ring renderer */
 
-/* Shows one host frame (3 * LED_RING_NUM_LEDS bytes, GRB) on the ring, with
- * the pointer's arc on its dark pixels while the pointer draws. Call on the
- * WS2812 tile. */
+/* Shows one host frame (3 * LED_RING_NUM_LEDS bytes, GRB) on the ring while
+ * the pointer is off; while it is on, keeps the frame for when it goes off
+ * and leaves the pointer's ring as it is. Call on the WS2812 tile. */
 void led_ring_show_host(rtos_ws2812_t *ctx, const uint8_t grb[]);
 
 /* Starts the pointer task at `priority`: every LED_POINTER_PERIOD_MS it reads

@@ -1,4 +1,4 @@
-// The LED pointer's maths and layering; see led_pointer.h.
+// The LED pointer's maths and its ownership of the ring; see led_pointer.h.
 
 #include <math.h>
 #include <string.h>
@@ -89,15 +89,12 @@ void led_pointer_init(led_pointer_t *p)
 
 static void compose(const led_pointer_t *p, uint8_t out[LED_POINTER_BYTES])
 {
-    memcpy(out, p->host, LED_POINTER_BYTES);
-    if (!p->drawing) {
-        return;
-    }
-    for (int n = 0; n < LED_POINTER_LEDS; n++) {
-        const uint8_t *h = &p->host[3 * n];
-        if ((h[0] | h[1] | h[2]) == 0) {
-            memcpy(&out[3 * n], &p->arc[3 * n], 3);
-        }
+    if (!p->enabled) {
+        memcpy(out, p->host, LED_POINTER_BYTES);
+    } else if (p->aimed) {
+        memcpy(out, p->arc, LED_POINTER_BYTES);
+    } else {
+        memset(out, 0, LED_POINTER_BYTES);
     }
 }
 
@@ -116,11 +113,12 @@ int led_pointer_tick(led_pointer_t *p, int enabled, int valid, float target_deg,
 
     if (enabled && !p->enabled) {
         led_glide_init(&p->glide, LED_POINTER_SETTLE_S);
+        p->aimed = 0;
     }
     p->enabled = (uint8_t)(enabled != 0);
-    p->drawing = (uint8_t)(enabled && valid);
-    if (p->drawing) {
+    if (enabled && valid) {
         led_arc_grb(led_glide_step(&p->glide, target_deg, dt_s), p->arc);
+        p->aimed = 1;
     }
     compose(p, next);
     if (memcmp(next, p->shown, LED_POINTER_BYTES) == 0) {
