@@ -32,10 +32,16 @@ static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_POINTER, 1 },
     { CHAIN_MODULE_PLAYBACK, 1 },
     { CHAIN_MODULE_BEAMS, 0 },
+#if !defined(SATELLITE1_VARIANT_IC_PHASES) || SATELLITE1_VARIANT_IC_PHASES != 0
     { CHAIN_MODULE_CANCELLER, 0 },
+#endif
     { CHAIN_MODULE_PICKER, 1 },
+#if !defined(SATELLITE1_VARIANT_NS) || SATELLITE1_VARIANT_NS
     { CHAIN_MODULE_POST, 0 },
+#endif
+#if !defined(SATELLITE1_VARIANT_AGC) || SATELLITE1_VARIANT_AGC
     { CHAIN_MODULE_GAIN, 1 },
+#endif
 };
 
 #define TAP_REVERT_MS ((uint32_t)CHAIN_TAP_REVERT_S * 1000u)

@@ -44,8 +44,12 @@ static aec_ctx_t DWORD_ALIGNED aec_state = {};
 
 /* The finishing task: picker, post-filter and gain control on the cleaned beams tile 0 returns */
 static chain_picker_t DWORD_ALIGNED chain_picker_state;
+#if !appconfAUDIO_PIPELINE_SKIP_NS
 static ns_stage_ctx_t DWORD_ALIGNED ns_stage_state = {};
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
 static agc_stage_ctx_t DWORD_ALIGNED agc_stage_state = {};
+#endif
 static chain_finish_req_t DWORD_ALIGNED chain_finish_req;
 static chain_finish_rep_t DWORD_ALIGNED chain_finish_rep;
 static volatile uint8_t chain_leader;      /* the picker's leader after the last finished frame */
@@ -509,6 +513,7 @@ static void stage_aec(frame_data_t *frame_data)
 #endif
 }
 
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
 static float db_to_lin(float db)
 {
     return powf(10.0f, db / 20.0f);
@@ -526,6 +531,7 @@ static void chain_gain_configure(agc_config_t *config, const chain_frame_ctrl_t 
         config->gain = config->max_gain;
     }
 }
+#endif
 
 /* Serves tile 0's finish requests on intertile_chain_ctx: picker, post-filter, gain control. */
 static void chain_finish_task(void *arg)
@@ -553,13 +559,17 @@ static void chain_finish_task(void *arg)
         rep->leader_score = chain_finish_req.scores[rep->leader];
         chain_leader = rep->leader;
 
-        if (c.post_on && !appconfAUDIO_PIPELINE_SKIP_NS) {
+#if !appconfAUDIO_PIPELINE_SKIP_NS
+        if (c.post_on) {
             ns_process_frame(&ns_stage_state.state, rep->post, mix);
-        } else {
+        } else
+#endif
+        {
             memcpy(rep->post, mix, sizeof(rep->post));
         }
 
-        if (c.gain_on && !appconfAUDIO_PIPELINE_SKIP_AGC) {
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
+        if (c.gain_on) {
             if (c.gain_target_dbfs != last.gain_target_dbfs || c.gain_max_gain_db != last.gain_max_gain_db ||
                 c.gain_adapt_on_voice != last.gain_adapt_on_voice) {
                 chain_gain_configure(&agc_stage_state.state.config, &c);
@@ -570,7 +580,9 @@ static void chain_finish_task(void *arg)
             agc_stage_state.md.aec_corr_factor = chain_finish_req.aec_corr_factor;
             memcpy(mix, rep->post, sizeof(mix));
             agc_process_frame(&agc_stage_state.state, rep->final, mix, &agc_stage_state.md);
-        } else {
+        } else
+#endif
+        {
             memcpy(rep->final, rep->post, sizeof(rep->final));
         }
 
@@ -583,12 +595,18 @@ static void initialize_chain(void)
     chain_frame_ctrl_t c;
 
     chain_picker_init(&chain_picker_state);
+#if !appconfAUDIO_PIPELINE_SKIP_NS
     ns_init(&ns_stage_state.state);
+#endif
+#if !appconfAUDIO_PIPELINE_SKIP_AGC
     agc_init(&agc_stage_state.state, &AGC_PROFILE_ASR);
     chain_control_frame_defaults(&c);
     chain_gain_configure(&agc_stage_state.state.config, &c);
     agc_stage_state.md.aec_ref_power = AGC_META_DATA_NO_AEC;
     agc_stage_state.md.aec_corr_factor = AGC_META_DATA_NO_AEC;
+#else
+    (void) c;
+#endif
     xTaskCreate(chain_finish_task, "chain finish", RTOS_THREAD_STACK_SIZE(chain_finish_task), NULL,
                 appconfAUDIO_PIPELINE_TASK_PRIORITY, NULL);
 }

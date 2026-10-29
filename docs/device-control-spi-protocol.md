@@ -470,6 +470,13 @@ The id is fixed.
 built), `ic_phases` (interference canceller filter phases, `0` when not
 built), then `vnr`, `ns`, `agc`, `doa` and `debug`, each `1` when built.
 
+On the beam chain, `ic_phases` `0` leaves out the four cancellers, so the
+beams reach the picker uncleaned and `canceller` loses its running flag; with
+`vnr` still `1`, each beam's voice score comes from lib_voice's VNR alone, with
+the canceller's smoothing. `ns` `0` and `agc` `0` leave out the post-filter
+and the gain control on tile 1, each a pass-through, and clear the running
+flag of `post` and `gain`.
+
 ### Chain Control
 
 Resource `233` (`CHAIN_RESOURCE_ID`, `satellite-xmos-firmware/src/chain_control`)

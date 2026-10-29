@@ -51,8 +51,14 @@ const build_variant_t audio_pipeline_build_variant = {
 };
 
 #if ON_TILE(0)
+#if !appconfAUDIO_PIPELINE_SKIP_IC
 /* One stock lib_ic per beam; two run in each of the two canceller stages. */
 static ic_state_t DWORD_ALIGNED chain_ics[CHAIN_BEAMS_COUNT];
+#elif !appconfAUDIO_PIPELINE_SKIP_VNR
+/* No canceller: the voice score on each beam alone, with the IC's smoothing */
+static vnr_state_t DWORD_ALIGNED chain_vnr_only[CHAIN_BEAMS_COUNT];
+static float_s32_t chain_vnr_smoothed[CHAIN_BEAMS_COUNT];
+#endif
 static chain_beams_t DWORD_ALIGNED chain_beams_state;     /* stage_cancel_01 only */
 static rtos_osal_mutex_t chain_vnr_mutex;      /* lib_voice's VNR model is one instance */
 static chain_finish_rep_t DWORD_ALIGNED chain_finish_rep;
@@ -201,12 +207,28 @@ static int audio_pipeline_output_i(frame_data_t *frame_data,
 }
 
 /* Cancellers first..first+1 on their beams; the cleaned outputs replace the beams in xfer.
- * Off, the beams pass through. */
+ * Off, or left out of the build, the beams pass through. */
 static void chain_cancel(frame_data_t *frame_data, int first)
 {
     chain_xfer_t *x = &((t0_frame_t *) frame_data)->xfer;
 
-    if (appconfAUDIO_PIPELINE_SKIP_IC_AND_VNR || !frame_data->chain_canceller_on) {
+#if appconfAUDIO_PIPELINE_SKIP_IC
+#if !appconfAUDIO_PIPELINE_SKIP_VNR
+    for (int k = first; k < first + 2; k++) {
+        float_s32_t raw;
+        rtos_osal_mutex_get(&chain_vnr_mutex, RTOS_OSAL_WAIT_FOREVER);
+        vnr_process_frame(&chain_vnr_only[k], &raw, x->beams[k]);
+        rtos_osal_mutex_put(&chain_vnr_mutex);
+        chain_vnr_smoothed[k] = float_s32_ema(chain_vnr_smoothed[k], raw, Q30(IC_INIT_VNR_PRED_ALPHA));
+        ((t0_frame_t *) frame_data)->raw_vnr[k] = float_s32_to_f32(raw);
+        frame_data->chain_scores[k] = float_s32_to_f32(chain_vnr_smoothed[k]);
+    }
+#else
+    (void) x;
+    (void) first;
+#endif
+#else
+    if (!frame_data->chain_canceller_on) {
         return;
     }
     for (int k = first; k < first + 2; k++) {
@@ -222,6 +244,7 @@ static void chain_cancel(frame_data_t *frame_data, int first)
                 frame_data->chain_target_valid, frame_data->chain_target_deg);
         memcpy(x->beams[k], out, sizeof(out));
     }
+#endif
 }
 
 /* The four beams and their blocking signals from the four mics after the AEC, into
@@ -333,7 +356,12 @@ static void initialize_pipeline_stages(void)
 
     chain_beams_init(&chain_beams_state);
     for (size_t k = 0; k < CHAIN_BEAMS_COUNT; k++) {
+#if !appconfAUDIO_PIPELINE_SKIP_IC
         ic_init(&chain_ics[k]);
+#elif !appconfAUDIO_PIPELINE_SKIP_VNR
+        vnr_state_init(&chain_vnr_only[k]);
+        chain_vnr_smoothed[k] = f32_to_float_s32(0.5f);   /* the stock initial prediction */
+#endif
     }
     xassert(rtos_osal_mutex_create(&chain_vnr_mutex, "chain vnr", RTOS_OSAL_NOT_RECURSIVE) == RTOS_OSAL_SUCCESS);
 }
