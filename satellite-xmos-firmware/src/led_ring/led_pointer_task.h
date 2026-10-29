@@ -8,14 +8,13 @@
 
 #define LED_POINTER_PERIOD_MS 33       /* about 30 frames a second, as the Pi's ring renderer */
 
-/* Shows one host frame (3 * LED_RING_NUM_LEDS bytes, GRB) on the ring while
- * the pointer is off; while it is on, keeps the frame for when it goes off
- * and leaves the pointer's ring as it is. Call on the WS2812 tile. */
+/* Shows one host frame (3 * LED_RING_NUM_LEDS bytes, GRB) on the ring, with
+ * the pointer's arc added while the pointer is on. Call on the WS2812 tile. */
 void led_ring_show_host(rtos_ws2812_t *ctx, const uint8_t grb[]);
 
 /* Starts the pointer task at `priority`: every LED_POINTER_PERIOD_MS it reads
- * the pointer module's on flag and the direction task's stabilised target and
- * redraws the ring when the arc moves. Call once on the WS2812 tile, before
+ * the pointer module's on flag and colour and the direction task's stabilised
+ * target, and redraws the ring when the arc moves or changes colour. Call once on the WS2812 tile, before
  * the LED ring servicer starts. Does nothing in a build without the direction
  * task or the chain control resource. */
 void led_pointer_task_start(rtos_ws2812_t *ctx, unsigned priority);

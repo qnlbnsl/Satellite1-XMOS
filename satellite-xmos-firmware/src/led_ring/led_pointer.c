@@ -9,9 +9,6 @@
 #define LED_DEG     15.0f
 #define ARC_SIDE    0.4f               /* ring.py arc_pixels side */
 
-/* ring.py arc_pixels colour (0, 80, 255), in WRITE_RAW's GRB order. */
-static const float arc_grb[3] = { 80.0f, 0.0f, 255.0f };
-
 /* Python's x % m for m > 0: into [0, m). */
 static float pymod(float x, float m)
 {
@@ -57,7 +54,7 @@ float led_glide_step(led_glide_t *g, float target_deg, float dt_s)
     return g->phi;
 }
 
-void led_arc_grb(float angle_deg, uint8_t out[LED_POINTER_BYTES])
+void led_arc_grb(float angle_deg, const uint8_t grb[3], uint8_t out[LED_POINTER_BYTES])
 {
     float level[LED_POINTER_LEDS] = { 0 };
     float p = pymod(angle_deg / LED_DEG, (float)LED_POINTER_LEDS);
@@ -75,7 +72,7 @@ void led_arc_grb(float angle_deg, uint8_t out[LED_POINTER_BYTES])
     for (int n = 0; n < LED_POINTER_LEDS; n++) {
         float b = level[n] < 1.0f ? level[n] : 1.0f;
         for (int c = 0; c < 3; c++) {
-            float v = rintf(arc_grb[c] * b);          /* round half to even, as Python's round */
+            float v = rintf((float)grb[c] * b);       /* round half to even, as Python's round */
             out[3 * n + c] = (uint8_t)(v > 255.0f ? 255.0f : v);
         }
     }
@@ -89,12 +86,9 @@ void led_pointer_init(led_pointer_t *p)
 
 static void compose(const led_pointer_t *p, uint8_t out[LED_POINTER_BYTES])
 {
-    if (!p->enabled) {
-        memcpy(out, p->host, LED_POINTER_BYTES);
-    } else if (p->aimed) {
-        memcpy(out, p->arc, LED_POINTER_BYTES);
-    } else {
-        memset(out, 0, LED_POINTER_BYTES);
+    for (int n = 0; n < LED_POINTER_BYTES; n++) {
+        unsigned v = p->host[n] + (p->enabled && p->aimed ? p->arc[n] : 0u);
+        out[n] = (uint8_t)(v > 255u ? 255u : v);
     }
 }
 
@@ -106,19 +100,24 @@ void led_pointer_host_frame(led_pointer_t *p, const uint8_t grb[LED_POINTER_BYTE
     memcpy(out, p->shown, LED_POINTER_BYTES);
 }
 
-int led_pointer_tick(led_pointer_t *p, int enabled, int valid, float target_deg, float dt_s,
-                     uint8_t out[LED_POINTER_BYTES])
+int led_pointer_tick(led_pointer_t *p, int enabled, int valid, float target_deg, const uint8_t grb[3],
+                     float dt_s, uint8_t out[LED_POINTER_BYTES])
 {
     uint8_t next[LED_POINTER_BYTES];
+    int recolour = memcmp(grb, p->grb, sizeof(p->grb)) != 0;
 
     if (enabled && !p->enabled) {
         led_glide_init(&p->glide, LED_POINTER_SETTLE_S);
         p->aimed = 0;
     }
     p->enabled = (uint8_t)(enabled != 0);
+    memcpy(p->grb, grb, sizeof(p->grb));
     if (enabled && valid) {
-        led_arc_grb(led_glide_step(&p->glide, target_deg, dt_s), p->arc);
+        p->angle = led_glide_step(&p->glide, target_deg, dt_s);
+        led_arc_grb(p->angle, p->grb, p->arc);
         p->aimed = 1;
+    } else if (recolour && p->aimed) {
+        led_arc_grb(p->angle, p->grb, p->arc);
     }
     compose(p, next);
     if (memcmp(next, p->shown, LED_POINTER_BYTES) == 0) {

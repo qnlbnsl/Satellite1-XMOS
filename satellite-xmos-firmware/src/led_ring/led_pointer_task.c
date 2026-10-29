@@ -66,7 +66,7 @@ static void led_pointer_task(void *arg)
         int valid = doa_task_smooth_deg(&target_deg);
 
         rtos_osal_mutex_get(&pointer_lock, RTOS_OSAL_WAIT_FOREVER);
-        if (led_pointer_tick(&pointer, ctrl.pointer, valid, target_deg, dt_s, out)) {
+        if (led_pointer_tick(&pointer, ctrl.pointer, valid, target_deg, ctrl.pointer_grb, dt_s, out)) {
             rtos_ws2812_write(ctx, out);
         }
         rtos_osal_mutex_put(&pointer_lock);

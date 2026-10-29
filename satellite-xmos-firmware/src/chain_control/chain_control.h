@@ -41,6 +41,7 @@ typedef struct {
     uint8_t aec_bypass;     /* 1: the echo canceller passes the mics through */
     int32_t mic_gain[CHAIN_MICS];  /* trim per mic, Q4.28; CHAIN_TRIM_UNITY when trim is off */
     uint8_t pointer;        /* 1: the LED pointer draws (the pointer module is on) */
+    uint8_t pointer_grb[3]; /* the pointer's arc colour, in WRITE_RAW's GRB order */
 } chain_frame_ctrl_t;
 
 /* What the speaker path applies to one frame. */

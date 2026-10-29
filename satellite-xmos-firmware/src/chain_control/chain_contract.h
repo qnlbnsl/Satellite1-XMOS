@@ -3,12 +3,12 @@
  * with chain_contract.jsonl beside it. Do not edit: chain_contract_check.cmake fails the build
  * when this file was changed by hand or no longer matches the projection. */
 #pragma once
-#define CHAIN_CONTRACT_HEADER_SHA256 "510158bb0d12170d6058e680ce426b566ca2c9b9114d21dd943ab468f4a97d1c"
+#define CHAIN_CONTRACT_HEADER_SHA256 "c15155813876872a9dc880b9dbac077321eeea9c5823b95ba5c0fe965a3675ed"
 
 #include <stdint.h>
 
 #define CHAIN_CONTRACT_VERSION 1
-#define CHAIN_CONTRACT_FINGERPRINT 0xb4e8d6c4c6191142ULL
+#define CHAIN_CONTRACT_FINGERPRINT 0x61373165caa23a60ULL
 #define CHAIN_RATE 16000
 #define CHAIN_HOP 240
 #define CHAIN_MICS 4
@@ -86,7 +86,7 @@
 #define CHAIN_HASH_7 0xe5bfba13f56afef5ULL
 #define CHAIN_HASH_8 0xc21a120b65e562e7ULL
 #define CHAIN_HASH_9 0x7c6f45b17c9cb6b8ULL
-#define CHAIN_HASH_10 0xb5c625c17f9a2a69ULL
+#define CHAIN_HASH_10 0xa292afa176451aa5ULL
 #define CHAIN_HASH_32 0x180a7e51bc9c63e6ULL
 
 /* Settings */
@@ -110,6 +110,9 @@
 #define CHAIN_SETTING_GAIN_MAX_GAIN_DB 2
 #define CHAIN_SETTING_GAIN_ADAPT_ON 3
 #define CHAIN_SETTING_ACTIVITY_THRESHOLD 1
+#define CHAIN_SETTING_POINTER_RED 1
+#define CHAIN_SETTING_POINTER_GREEN 2
+#define CHAIN_SETTING_POINTER_BLUE 3
 #define CHAIN_SETTING_PLAYBACK_DUCK_DB 1
 #define CHAIN_SETTING_PLAYBACK_RAMP_MS 2
 #define CHAIN_SETTING_PLAYBACK_DUCK_MAX_S 3
@@ -185,6 +188,11 @@ static const chain_setting_spec_t chain_gain_settings[] = {
 static const chain_setting_spec_t chain_activity_settings[] = {
     { 1, CHAIN_TYPE_FLOAT, 0, 0x0.0p+0f /* 0.0 */, 0x1.0000000000000p+0f /* 1.0 */, 0.0f, 0x3f000000u /* 0.5 */, 0, 0 },
 };
+static const chain_setting_spec_t chain_pointer_settings[] = {
+    { 1, CHAIN_TYPE_INT, 0, 0x0.0p+0f /* 0 */, 0x1.fe00000000000p+7f /* 255 */, 0.0f, 0x00000000u /* 0 */, 0, 0 },
+    { 2, CHAIN_TYPE_INT, 0, 0x0.0p+0f /* 0 */, 0x1.fe00000000000p+7f /* 255 */, 0.0f, 0x00000080u /* 128 */, 0, 0 },
+    { 3, CHAIN_TYPE_INT, 0, 0x0.0p+0f /* 0 */, 0x1.fe00000000000p+7f /* 255 */, 0.0f, 0x00000000u /* 0 */, 0, 0 },
+};
 static const chain_setting_spec_t chain_playback_settings[] = {
     { 1, CHAIN_TYPE_FLOAT, 0, 0x0.0p+0f /* 0.0 */, 0x1.4000000000000p+5f /* 40.0 */, 0.0f, 0x41c80000u /* 25.0 */, 0, 0 },
     { 2, CHAIN_TYPE_INT, 0, 0x0.0p+0f /* 0 */, 0x1.f400000000000p+8f /* 500 */, 0.0f, 0x00000032u /* 50 */, 0, 0 },
@@ -200,7 +208,7 @@ static const chain_module_spec_t chain_modules[CHAIN_MODULE_COUNT] = {
     { CHAIN_MODULE_POST, 0, CHAIN_HASH_7, chain_post_variants, 2, chain_post_settings, 1 },
     { CHAIN_MODULE_GAIN, 0, CHAIN_HASH_8, 0, 0, chain_gain_settings, 3 },
     { CHAIN_MODULE_ACTIVITY, 1, CHAIN_HASH_9, 0, 0, chain_activity_settings, 1 },
-    { CHAIN_MODULE_POINTER, 0, CHAIN_HASH_10, 0, 0, 0, 0 },
+    { CHAIN_MODULE_POINTER, 0, CHAIN_HASH_10, 0, 0, chain_pointer_settings, 3 },
     { CHAIN_MODULE_PLAYBACK, 1, CHAIN_HASH_32, 0, 0, chain_playback_settings, 3 },
 };
 #endif /* CHAIN_CONTRACT_TABLES */

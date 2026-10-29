@@ -23,6 +23,16 @@ int32_t chain_control_frame_gain(chain_control_t *cc, uint32_t now_ms, int mic)
     return f.mic_gain[mic];
 }
 
+/* The pointer's arc colour the next frame draws, G, R, B into out[0..2]. */
+void chain_control_frame_pointer_grb(chain_control_t *cc, uint32_t now_ms, uint8_t out[3])
+{
+    chain_frame_ctrl_t f;
+    chain_control_frame(cc, now_ms, &f);
+    out[0] = f.pointer_grb[0];
+    out[1] = f.pointer_grb[1];
+    out[2] = f.pointer_grb[2];
+}
+
 /* chain_control_playback's target in dB; its ramp_ms goes to *ramp_ms. */
 float chain_control_playback_target(chain_control_t *cc, uint32_t now_ms, float applied_db,
                                     uint16_t *ramp_ms)

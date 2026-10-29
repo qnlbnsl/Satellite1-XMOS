@@ -270,7 +270,7 @@ Command:
 For Satellite1, `LED_RING_NUM_LEDS` is `24`, so the raw write payload is
 `72` bytes, three per LED in G, R, B order. While the chain control's LED
 pointer is off (the default), the payload is passed directly to
-`rtos_ws2812_write()`.
+`rtos_ws2812_write()`; while it is on, the arc is added to it.
 
 **LED pointer.** With the chain control module `pointer` (`10`) on and the
 direction task locked (`GET_DOA_SMOOTH` `valid`), the chip draws an arc
@@ -280,16 +280,18 @@ translation of satellite's `prototype/doa/ring.py`):
 
 - The arc is centred at `angle / 15` LEDs (LED `k` at `k * 15` degrees), full
   brightness split between the two LEDs either side of that position and 0.4
-  of it one LED further out, in colour R, G, B = `0, 80, 255`.
+  of it one LED further out, in the pointer's colour: its settings `red` (`1`),
+  `green` (`2`) and `blue` (`3`), each 0 to 255, default `0, 128, 0`. A new
+  colour redraws the arc where it is.
 - It glides to a new direction on a critically damped spring that settles in
   0.4 s; turning the pointer on starts it at the current direction, at rest.
-- **The ring has one owner.** While the pointer is on, the chip owns all 24
-  LEDs and shows the arc alone; a host `WRITE_RAW` is kept but not shown, mute
-  overlay included. Before the direction task's first lock the ring is dark,
-  and while the lock is lost the arc stays where it was.
-- Turning the pointer off shows the host's last frame again at once, including
-  one written while the pointer was on. A host that wants the ring back turns
-  the pointer off.
+- **The arc and the host's frame mix.** While the pointer is on, the ring
+  shows the host's last `WRITE_RAW` with the arc added, each of G, R and B
+  added and clipped at 255, so light the host and the chip put on one LED adds
+  as light does (a host's red over a green arc shows amber). Before the
+  direction task's first lock the host's frame shows alone, and while the lock
+  is lost the arc stays where it was.
+- Turning the pointer off shows the host's last frame alone at once.
 - The pointer writes the ring only when the shown frame changes, so a settled
   arc costs no LED writes.
 
@@ -515,9 +517,9 @@ are little-endian.
     trimmed;
   - the echo canceller (`aec`), flag `4` clear: `on` and `BYPASS_ALL` bypass it
     through lib_voice's own bypass; its tail and step size are the build's;
-  - the LED pointer (`pointer`, off by default; see "LED Ring Servicer"), whose
-    only control is its on flag, so its flag `4` is set. `BYPASS_ALL` does not
-    touch the pointer;
+  - the LED pointer (`pointer`, off by default; see "LED Ring Servicer"), which
+    honours its on flag and its colour, so its flag `4` is set. `BYPASS_ALL`
+    does not touch the pointer;
   - `playback` (module `32`, after the chain's modules in `STATE`), the speaker
     path's duck, flag `4` set.
 - The fingerprint is the first 8 bytes of the sha256 of `chain_contract.jsonl`,

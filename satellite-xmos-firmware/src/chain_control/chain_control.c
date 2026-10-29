@@ -19,7 +19,7 @@
 /* Modules this firmware runs. `applied` is 1 only when every one of the
  * module's settings takes effect. Trim applies one broadband gain per mic and
  * plays no chime; the echo canceller honours on and bypass, while its tail and
- * step size are fixed by the build. The LED pointer has only its on flag.
+ * step size are fixed by the build. The LED pointer honours on and its colour.
  * Playback is the speaker path's duck (playback_duck.c), every setting live. */
 static const struct { uint8_t id; uint8_t applied; } chip_runs[] = {
     { CHAIN_MODULE_TRIM, 0 },
@@ -641,6 +641,16 @@ void chain_control_frame(chain_control_t *cc, uint32_t now_ms, chain_frame_ctrl_
     out->tap = cc->tap;
     out->aec_bypass = cc->bypass_all || (aec >= 0 && !cc->modules[aec].on);
     out->pointer = pointer >= 0 && cc->modules[pointer].on;
+    if (pointer >= 0) {
+        /* An int setting's wire bits are its value; the contract keeps each in 0..255. */
+        const chain_module_spec_t *spec = &chain_modules[pointer];
+        const uint32_t *v = cc->modules[pointer].values;
+        out->pointer_grb[0] = (uint8_t)v[setting_index(spec, CHAIN_SETTING_POINTER_GREEN)];
+        out->pointer_grb[1] = (uint8_t)v[setting_index(spec, CHAIN_SETTING_POINTER_RED)];
+        out->pointer_grb[2] = (uint8_t)v[setting_index(spec, CHAIN_SETTING_POINTER_BLUE)];
+    } else {
+        memset(out->pointer_grb, 0, sizeof(out->pointer_grb));
+    }
     for (int m = 0; m < CHAIN_MICS; m++) {
         out->mic_gain[m] = trim_on ? cc->trim_gain[m] : CHAIN_TRIM_UNITY;
     }
