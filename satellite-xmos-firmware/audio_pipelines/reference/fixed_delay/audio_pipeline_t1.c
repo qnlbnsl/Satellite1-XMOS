@@ -587,6 +587,11 @@ static void chain_finish_task(void *arg)
         }
 
         rtos_intertile_tx(intertile_chain_ctx, CHAIN_FINISH_REP_PORT, rep, sizeof(*rep));
+
+        int lock = rtos_osal_critical_enter();
+        chain_picker_latches_update(&audio_pipeline_beams_latch, &chain_picker_state, c.picker_on,
+                                    chain_finish_req.scores);
+        rtos_osal_critical_exit(lock);
     }
 }
 
@@ -595,6 +600,7 @@ static void initialize_chain(void)
     chain_frame_ctrl_t c;
 
     chain_picker_init(&chain_picker_state);
+    chain_picker_latches_init(&audio_pipeline_beams_latch);
 #if !appconfAUDIO_PIPELINE_SKIP_NS
     ns_init(&ns_stage_state.state);
 #endif

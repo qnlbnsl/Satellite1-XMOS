@@ -40,6 +40,10 @@ enum e_audio_pipeline_settings_cmds
 
     /* Fixed id. Served on resource 230 (tile 0) only: build_variant_t. */
     AUDIO_PIPELINE_SETTINGS_CMD_GET_BUILD_VARIANT = 34,
+
+    /* Fixed id. Served on resource 232 (tile 1) only: the picker's per-beam latches,
+     * CHAIN_PICKER_BEAMS_WIRE_LEN bytes as chain_picker_latches_pack writes them. */
+    AUDIO_PIPELINE_SETTINGS_CMD_GET_BEAMS = 35,
 };
 
 typedef enum

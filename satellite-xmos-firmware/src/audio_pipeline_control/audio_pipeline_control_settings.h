@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "chain_picker.h"
+
 #define AUDIO_PIPELINE_MIC_OUTPUT_SETTINGS_RESID       (230)
 #define AUDIO_PIPELINE_SPEAKER_SETTINGS_RESID          (231)
 #define AUDIO_PIPELINE_MIC_INPUT_SETTINGS_RESID        (232)
@@ -140,6 +142,10 @@ typedef struct
 
 /* Written by the pipeline on tile 0, read on resource 230 under a critical section. */
 extern vnr_reading_t audio_pipeline_vnr_reading;
+
+/* The picker's per-beam latches (chain_picker.h), written by the fixed_delay pipeline on tile 1
+ * and read as GET_BEAMS on resource 232, both under a critical section. */
+extern chain_picker_latches_t audio_pipeline_beams_latch;
 
 /* Which voice-chain stages this image was built with (firmware.cmake,
  * "Voice-chain variant"). A phase count of 0 means the stage is not built. */

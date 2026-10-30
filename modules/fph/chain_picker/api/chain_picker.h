@@ -48,7 +48,46 @@ typedef struct {
     int challenge;
     float gains[CHAIN_PICKER_BEAMS];    /* the mix applied at the end of the last frame */
     int locked;                         /* hybrid follows the direction while set */
+    float bg[CHAIN_PICKER_BEAMS][8];    /* the background per beam and band after the last scored frame */
 } chain_picker_t;
+
+/* The moment something new started, one latch per beam. A beam's latch fires when its VNR reaches
+ * CHAIN_PICKER_LATCH_VNR after at least CHAIN_PICKER_LATCH_QUIET consecutive frames below it, and is
+ * not replaced while its peak window is open. */
+#define CHAIN_PICKER_LATCH_VNR   (0.5f)
+#define CHAIN_PICKER_LATCH_QUIET (33)   /* 0.5 s of 15 ms frames */
+#define CHAIN_PICKER_LATCH_PEAK  (67)   /* 1 s */
+
+typedef struct {
+    uint32_t frame;                     /* the frame it fired on; 0: never */
+    int open;                           /* frames left in its peak window */
+    float bg_before[CHAIN_PICKER_BEAMS][8];  /* every beam's background the frame before it fired */
+    float peak[CHAIN_PICKER_BEAMS][8];       /* every beam's peak band power since it fired */
+} chain_picker_latch_t;
+
+typedef struct {
+    uint32_t frame_now;                 /* frames seen since boot, from 1, skipping 0 on wrap */
+    float vnr[CHAIN_PICKER_BEAMS];      /* the last frame's per-beam VNR */
+    int quiet[CHAIN_PICKER_BEAMS];      /* consecutive frames below the VNR threshold */
+    int have_prev;
+    float bg_prev[CHAIN_PICKER_BEAMS][8];
+    chain_picker_latch_t latch[CHAIN_PICKER_BEAMS];
+} chain_picker_latches_t;
+
+/* GET_BEAMS's reply: u32 frame_now, u8 vnr_now[4] (x255), then per beam u32 frame, u8 open,
+ * u8 pad[3], i16 bg[4], i16 peak[4] (band means in centi-dB). Little-endian. */
+#define CHAIN_PICKER_BEAMS_WIRE_LEN (104)
+
+/* Resets every latch and counter. */
+void chain_picker_latches_init(chain_picker_latches_t *l);
+
+/* One frame, after chain_picker_process on `p`: `vnr` is each beam's VNR (0..1). With `picker_on`
+ * 0 the picker scored nothing, so every latch is cleared; the frame is still counted. */
+void chain_picker_latches_update(chain_picker_latches_t *l, const chain_picker_t *p, int picker_on,
+                                 const float vnr[CHAIN_PICKER_BEAMS]);
+
+/* Packs `l` as GET_BEAMS's reply into `out` (CHAIN_PICKER_BEAMS_WIRE_LEN bytes). */
+void chain_picker_latches_pack(const chain_picker_latches_t *l, uint8_t *out);
 
 /* Resets `p` (8-byte aligned): leader beam 0 with the whole mix, no background yet. */
 void chain_picker_init(chain_picker_t *p);

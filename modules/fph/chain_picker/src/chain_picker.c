@@ -129,6 +129,7 @@ static void score(chain_picker_t *p, const int32_t *outs, float background_s)
                     bg = p->ring[r][o][b];
                 }
             }
+            p->bg[o][b] = bg;
             sum += 10.0f * log10f((p->P[o][b] + CHAIN_PICKER_EPS) / (bg + CHAIN_PICKER_EPS));
         }
         p->scores[o] = sum / (float)NB;
@@ -235,5 +236,107 @@ void chain_picker_process(chain_picker_t *p, const int32_t *outs, const chain_pi
     }
     for (int o = 0; o < B; o++) {
         p->gains[o] += d[o];
+    }
+}
+
+void chain_picker_latches_init(chain_picker_latches_t *l)
+{
+    memset(l, 0, sizeof(*l));
+}
+
+void chain_picker_latches_update(chain_picker_latches_t *l, const chain_picker_t *p, int picker_on,
+                                 const float vnr[B])
+{
+    l->frame_now++;
+    if (l->frame_now == 0) {
+        l->frame_now = 1;
+    }
+    memcpy(l->vnr, vnr, sizeof(l->vnr));
+    if (!picker_on) {
+        memset(l->latch, 0, sizeof(l->latch));
+        memset(l->quiet, 0, sizeof(l->quiet));
+        l->have_prev = 0;
+        return;
+    }
+    for (int o = 0; o < B; o++) {
+        chain_picker_latch_t *t = &l->latch[o];
+        if (t->open > 0) {
+            for (int q = 0; q < B; q++) {
+                for (int b = 0; b < NB; b++) {
+                    if (p->P[q][b] > t->peak[q][b]) {
+                        t->peak[q][b] = p->P[q][b];
+                    }
+                }
+            }
+            t->open--;
+        }
+    }
+    for (int o = 0; o < B; o++) {
+        if (vnr[o] < CHAIN_PICKER_LATCH_VNR) {
+            if (l->quiet[o] < CHAIN_PICKER_LATCH_QUIET) {
+                l->quiet[o]++;
+            }
+            continue;
+        }
+        chain_picker_latch_t *t = &l->latch[o];
+        if (l->quiet[o] >= CHAIN_PICKER_LATCH_QUIET && t->open == 0 && l->have_prev) {
+            t->frame = l->frame_now;
+            t->open = CHAIN_PICKER_LATCH_PEAK;
+            memcpy(t->bg_before, l->bg_prev, sizeof(t->bg_before));
+            memcpy(t->peak, p->P, sizeof(t->peak));
+        }
+        l->quiet[o] = 0;
+    }
+    memcpy(l->bg_prev, p->bg, sizeof(l->bg_prev));
+    l->have_prev = 1;
+}
+
+static int16_t mean_cdb(const float x[NB])
+{
+    float sum = 0.0f;
+    for (int b = 0; b < NB; b++) {
+        sum += 1000.0f * log10f(x[b] + CHAIN_PICKER_EPS);
+    }
+    float m = sum / (float)NB;
+    if (m >= 32767.0f) {
+        return INT16_MAX;
+    }
+    if (m <= -32768.0f) {
+        return INT16_MIN;
+    }
+    return (int16_t)(m >= 0.0f ? m + 0.5f : m - 0.5f);
+}
+
+static void put_u32(uint8_t *o, uint32_t v)
+{
+    o[0] = (uint8_t)v;
+    o[1] = (uint8_t)(v >> 8);
+    o[2] = (uint8_t)(v >> 16);
+    o[3] = (uint8_t)(v >> 24);
+}
+
+static void put_i16(uint8_t *o, int16_t v)
+{
+    o[0] = (uint8_t)((uint16_t)v);
+    o[1] = (uint8_t)((uint16_t)v >> 8);
+}
+
+void chain_picker_latches_pack(const chain_picker_latches_t *l, uint8_t *out)
+{
+    memset(out, 0, CHAIN_PICKER_BEAMS_WIRE_LEN);
+    put_u32(&out[0], l->frame_now);
+    for (int o = 0; o < B; o++) {
+        float v = l->vnr[o] < 0.0f ? 0.0f : (l->vnr[o] > 1.0f ? 1.0f : l->vnr[o]);
+        out[4 + o] = (uint8_t)(v * 255.0f + 0.5f);
+    }
+    uint8_t *w = &out[8];
+    for (int o = 0; o < B; o++, w += 24) {
+        const chain_picker_latch_t *t = &l->latch[o];
+        put_u32(&w[0], t->frame);
+        w[4] = (uint8_t)(t->open > 255 ? 255 : t->open);
+        for (int q = 0; q < B; q++) {
+            put_i16(&w[8 + 2 * q], t->frame ? mean_cdb(t->bg_before[q]) : 0);
+            put_i16(&w[16 + 2 * q], t->frame ? mean_cdb(t->peak[q]) : 0);
+        }
     }
 }

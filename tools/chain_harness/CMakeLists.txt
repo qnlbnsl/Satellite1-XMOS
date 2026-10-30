@@ -23,3 +23,7 @@ target_link_libraries(voice_ic PUBLIC lib_xcore_math m)
 add_executable(chain_harness main.c vnr_feed.c)
 target_link_libraries(chain_harness PRIVATE fph::chain_beams fph::chain_picker fph::chain_canceller voice_ic m)
 target_compile_options(chain_harness PRIVATE -O2 -Wall -Wextra -Werror)
+
+add_executable(test_beams test_beams.c)
+target_link_libraries(test_beams PRIVATE fph::chain_picker m)
+target_compile_options(test_beams PRIVATE -O2 -Wall -Wextra -Werror)

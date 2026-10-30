@@ -31,6 +31,11 @@ extern void fixed_delay_aec_capture_get_selected_chunk(
 vnr_reading_t audio_pipeline_vnr_reading;
 #endif
 
+#if ON_TILE(1)
+chain_picker_latches_t audio_pipeline_beams_latch;
+static chain_picker_latches_t beams_copy;  /* the servicer's copy, packed outside the lock */
+#endif
+
 static control_cmd_info_t audio_pipeline_mic_settings_cmd_map[] = {
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_SETTINGS, 1,
       sizeof(mic_output_pipeline_settings_t), CMD_READ_ONLY },
@@ -63,6 +68,8 @@ static control_cmd_info_t audio_pipeline_mic_input_settings_cmd_map[] = {
       sizeof(doa_reading_t), CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_DOA_SMOOTH, 1,
       sizeof(doa_reading_t), CMD_READ_ONLY },
+    { AUDIO_PIPELINE_SETTINGS_CMD_GET_BEAMS, 1,
+      CHAIN_PICKER_BEAMS_WIRE_LEN, CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_MIC_INPUT_DEBUG_STATS, 1,
       sizeof(mic_input_debug_stats_t), CMD_READ_ONLY },
     { AUDIO_PIPELINE_SETTINGS_CMD_GET_HEAP_STATS, 1,
@@ -328,6 +335,24 @@ static control_ret_t audio_pipeline_servicer_read_cmd(
             memcpy(payload, &ctx->doa->smooth, sizeof(ctx->doa->smooth));
         }
         rtos_osal_critical_exit(lock);
+        payload[-1] = ret;
+        return ret;
+    }
+
+    if (cmd_id == AUDIO_PIPELINE_SETTINGS_CMD_GET_BEAMS) {
+#if ON_TILE(1)
+        if (resid != AUDIO_PIPELINE_MIC_INPUT_SETTINGS_RESID) {
+            ret = CONTROL_BAD_COMMAND;
+            payload[-1] = ret;
+            return ret;
+        }
+        int lock = rtos_osal_critical_enter();
+        memcpy(&beams_copy, &audio_pipeline_beams_latch, sizeof(beams_copy));
+        rtos_osal_critical_exit(lock);
+        chain_picker_latches_pack(&beams_copy, payload);
+#else
+        ret = CONTROL_BAD_COMMAND;
+#endif
         payload[-1] = ret;
         return ret;
     }
